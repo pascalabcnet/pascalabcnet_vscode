@@ -51,6 +51,12 @@ Prepare a clean compiler runtime from a standard local PascalABC.NET installatio
 .\scripts\build-runtime.ps1
 ```
 
+From Command Prompt (`cmd.exe`), use the wrapper:
+
+```bat
+scripts\build-runtime.cmd
+```
+
 By default the script uses `C:\Program Files (x86)\PascalABC.NET`. A different installation can be selected with `-PascalABCPath`. The script stages and validates the new runtime before replacing the generated `bin/` directory.
 
 ## Building a VSIX
