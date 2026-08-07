@@ -10,6 +10,7 @@ LICENSE        text eol=lf
 *.txt  text eol=lf
 *.svg  text eol=lf
 *.pas  text eol=lf
+*.ps1  text eol=lf
 *.dll  binary
 
 # Preserve the vendor-supplied notice verbatim.

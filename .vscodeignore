@@ -1,6 +1,7 @@
 .vscode/**
 src/**
 compiler-host/**
+scripts/**
 node_modules/**
 tsconfig.json
 package-lock.json

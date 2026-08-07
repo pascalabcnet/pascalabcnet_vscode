@@ -4,6 +4,7 @@ node_modules/
 # Generated output and bundled compiler runtime
 out/
 bin/
+.build/
 
 # Packaged extensions
 *.vsix

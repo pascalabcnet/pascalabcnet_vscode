@@ -45,6 +45,14 @@ npm run compile
 
 Open the repository in Visual Studio Code and press `F5` to launch an Extension Development Host window.
 
+Prepare a clean compiler runtime from a standard local PascalABC.NET installation:
+
+```powershell
+.\scripts\build-runtime.ps1
+```
+
+By default the script uses `C:\Program Files (x86)\PascalABC.NET`. A different installation can be selected with `-PascalABCPath`. The script stages and validates the new runtime before replacing the generated `bin/` directory.
+
 ## Building a VSIX
 
 Before packaging, make sure that `bin/` contains the complete compiler runtime required by the extension. Then run:
