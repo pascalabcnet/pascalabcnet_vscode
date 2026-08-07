@@ -7,5 +7,10 @@ LICENSE        text eol=lf
 *.ts   text eol=lf
 *.json text eol=lf
 *.md   text eol=lf
+*.txt  text eol=lf
 *.svg  text eol=lf
 *.pas  text eol=lf
+*.dll  binary
+
+# Preserve the vendor-supplied notice verbatim.
+compiler-host/dependencies/netmq/THIRD-PARTY-NOTICES-System.Threading.Tasks.Extensions.txt whitespace=-trailing-space

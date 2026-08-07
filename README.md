@@ -28,6 +28,9 @@ The sources of the compilation bridge are stored in [`compiler-host`](compiler-h
 
 - `PABCCompilerController.pas`
 - `ZMQServerPas.pas`
+- `CompileRunHelper.pas`
+
+Temporary prebuilt NetMQ dependencies used to build and stage the compilation bridge are stored in `compiler-host/dependencies/netmq`. They are copied into the generated `bin/` directory during runtime preparation. In the future these dependencies can be built from source for the required platform.
 
 PascalABC.NET itself is planned to be connected to this repository separately as a Git submodule. It is not included yet.
 
