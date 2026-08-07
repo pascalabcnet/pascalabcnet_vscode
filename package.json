@@ -1,0 +1,224 @@
+{
+  "name": "pascalabc-net",
+  "displayName": "PascalABC.NET",
+  "description": "PascalABC.NET support for Visual Studio Code",
+  "version": "0.0.1",
+  "publisher": "pascalabcnet",
+  "license": "LGPL-3.0-only",
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configurationDefaults": {
+      "[pascalabc]": {
+        "editor.inlineSuggest.enabled": false
+      },
+      "editor.tokenColorCustomizations": {
+        "textMateRules": [
+          {
+            "scope": "keyword.control.block.pascalabc",
+            "settings": {
+              "foreground": "#D7BA7D",
+              "fontStyle": "bold"
+              }
+            },
+          {
+            "scope": "storage.modifier.variable.pascalabc",
+            "settings": {
+              "foreground": "#D19A66",
+              "fontStyle": "bold"
+            }
+          },
+          {
+            "scope": "keyword.control.import.pascalabc",
+            "settings": {
+              "foreground": "#C586C0",
+              "fontStyle": "bold"
+            }
+          },
+            {
+              "scope": [
+                "keyword.operator.word.pascalabc",
+                "keyword.control.pascalabc",
+                "keyword.declaration.pascalabc",
+                "keyword.other.pascalabc",
+                "storage.modifier.pascalabc",
+                "storage.type.function.pascalabc"
+            ],
+            "settings": {
+              "foreground": "#4FC1FF",
+              "fontStyle": "bold"
+            }
+          },
+          {
+            "scope": "meta.type.inline.pascalabc storage.type.pascalabc",
+            "settings": {
+              "fontStyle": "bold"
+            }
+          },
+            {
+              "scope": "storage.type.pascalabc",
+              "settings": {
+                "foreground": "#20E0B2"
+              }
+            },
+            {
+              "scope": "entity.name.function.pascalabc",
+              "settings": {
+                "foreground": "#DCDCAA"
+              }
+            },
+            {
+              "scope": [
+                "constant.language.pascalabc",
+                "constant.numeric.hex.pascalabc",
+                "constant.numeric.binary.pascalabc",
+                "constant.numeric.float.pascalabc",
+                "constant.numeric.integer.pascalabc"
+              ],
+              "settings": {
+                "foreground": "#98C379"
+              }
+            }
+        ]
+      }
+    },
+    "languages": [
+      {
+        "id": "pascalabc",
+        "aliases": [
+          "PascalABC.NET",
+          "PascalABC"
+        ],
+        "extensions": [
+          ".pas"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "pascalabc",
+        "scopeName": "source.pascalabc",
+        "path": "./syntaxes/pascalabc.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "pascalabc",
+        "path": "./snippets/pascalabc.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "pascalabc.compileCurrentFile",
+        "title": "PascalABC.NET: Compile Current File",
+        "icon": {
+          "light": "./images/compile-light.svg",
+          "dark": "./images/compile-dark.svg"
+        }
+      },
+      {
+        "command": "pascalabc.compileAndRun",
+        "title": "PascalABC.NET: Compile and Run",
+        "icon": {
+          "light": "./images/run-light.svg",
+          "dark": "./images/run-dark.svg"
+        }
+      },
+      {
+        "command": "pascalabc.showOutput",
+        "title": "PascalABC.NET: Show Output"
+      },
+      {
+        "command": "pascalabc.restartCompiler",
+        "title": "PascalABC.NET: Restart Compiler"
+      },
+      {
+        "command": "pascalabc.newFile",
+        "title": "PascalABC.NET File",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "pascalabc.openFile",
+        "title": "PascalABC.NET: Open File",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "pascalabc.saveFile",
+        "title": "PascalABC.NET: Save File",
+        "icon": "$(save)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "pascalabc.compileAndRun",
+        "key": "f9",
+        "when": "editorLangId == pascalabc"
+      },
+      {
+        "command": "pascalabc.compileCurrentFile",
+        "key": "ctrl+f9",
+        "when": "editorLangId == pascalabc"
+      }
+    ],
+    "menus": {
+      "file/newFile": [
+        {
+          "command": "pascalabc.newFile",
+          "group": "1_new@20"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "pascalabc.compileAndRun",
+          "when": "editorLangId == pascalabc",
+          "group": "navigation@1"
+        },
+        {
+          "command": "pascalabc.compileCurrentFile",
+          "when": "editorLangId == pascalabc",
+          "group": "navigation@2"
+        },
+        {
+          "command": "pascalabc.newFile",
+          "when": "editorLangId == pascalabc",
+          "group": "navigation@3"
+        },
+        {
+          "command": "pascalabc.openFile",
+          "when": "editorLangId == pascalabc",
+          "group": "navigation@4"
+        },
+        {
+          "command": "pascalabc.saveFile",
+          "when": "editorLangId == pascalabc",
+          "group": "navigation@5"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "PascalABC.NET",
+      "properties": {
+        "pascalabc.controllerPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to PABCCompilerController.exe. An empty value uses the bundled controller."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.100.0",
+    "typescript": "^5.8.0"
+  }
+}

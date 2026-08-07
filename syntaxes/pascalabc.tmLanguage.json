@@ -1,0 +1,178 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "PascalABC.NET",
+  "scopeName": "source.pascalabc",
+  "patterns": [
+    { "include": "#directives" },
+    { "include": "#comments" },
+    { "include": "#strings" },
+    { "include": "#beginEndBlocks" },
+    { "include": "#tryBlocks" },
+    { "include": "#inlineTypeDeclarations" },
+    { "include": "#numbers" },
+    { "include": "#declarations" },
+    { "include": "#types" },
+    { "include": "#keywords" }
+  ],
+  "repository": {
+    "beginEndBlocks": {
+      "patterns": [
+        {
+          "name": "meta.block.begin-end.pascalabc",
+          "begin": "(?i)\\bbegin\\b",
+          "beginCaptures": {
+            "0": { "name": "keyword.control.block.pascalabc" }
+          },
+          "end": "(?i)\\bend\\b",
+          "endCaptures": {
+            "0": { "name": "keyword.control.block.pascalabc" }
+          },
+          "patterns": [
+            { "include": "#directives" },
+            { "include": "#comments" },
+            { "include": "#strings" },
+            { "include": "#beginEndBlocks" },
+            { "include": "#tryBlocks" },
+            { "include": "#inlineTypeDeclarations" },
+            { "include": "#numbers" },
+            { "include": "#declarations" },
+            { "include": "#types" },
+            { "include": "#keywords" }
+          ]
+        }
+      ]
+    },
+    "tryBlocks": {
+      "patterns": [
+        {
+          "name": "meta.block.try.pascalabc",
+          "begin": "(?i)\\btry\\b",
+          "beginCaptures": {
+            "0": { "name": "keyword.control.pascalabc" }
+          },
+          "end": "(?i)\\bend\\b",
+          "endCaptures": {
+            "0": { "name": "keyword.control.pascalabc" }
+          },
+          "patterns": [
+            { "include": "#directives" },
+            { "include": "#comments" },
+            { "include": "#strings" },
+            { "include": "#beginEndBlocks" },
+            { "include": "#tryBlocks" },
+            { "include": "#inlineTypeDeclarations" },
+            { "include": "#numbers" },
+            { "include": "#declarations" },
+            { "include": "#types" },
+            { "include": "#keywords" }
+          ]
+        }
+      ]
+    },
+    "inlineTypeDeclarations": {
+      "patterns": [
+        {
+          "name": "meta.type.inline.pascalabc",
+          "match": "(?i)\\b(class|record|interface)\\b([^\\r\\n]*?)\\b(end)\\b",
+          "captures": {
+            "1": { "name": "storage.type.pascalabc" },
+            "3": { "name": "storage.type.pascalabc" }
+          }
+        }
+      ]
+    },
+    "directives": {
+      "patterns": [
+        {
+          "name": "meta.preprocessor.pascalabc",
+          "begin": "\\{\\$",
+          "beginCaptures": { "0": { "name": "punctuation.definition.preprocessor.begin.pascalabc" } },
+          "end": "\\}",
+          "endCaptures": { "0": { "name": "punctuation.definition.preprocessor.end.pascalabc" } },
+          "contentName": "keyword.control.directive.pascalabc"
+        },
+        {
+          "name": "meta.preprocessor.pascalabc",
+          "begin": "\\(\\*\\$",
+          "beginCaptures": { "0": { "name": "punctuation.definition.preprocessor.begin.pascalabc" } },
+          "end": "\\*\\)",
+          "endCaptures": { "0": { "name": "punctuation.definition.preprocessor.end.pascalabc" } },
+          "contentName": "keyword.control.directive.pascalabc"
+        }
+      ]
+    },
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.double-slash.pascalabc",
+          "begin": "//",
+          "beginCaptures": { "0": { "name": "punctuation.definition.comment.pascalabc" } },
+          "end": "$"
+        },
+        {
+          "name": "comment.block.braces.pascalabc",
+          "begin": "\\{",
+          "beginCaptures": { "0": { "name": "punctuation.definition.comment.begin.pascalabc" } },
+          "end": "\\}",
+          "endCaptures": { "0": { "name": "punctuation.definition.comment.end.pascalabc" } }
+        },
+        {
+          "name": "comment.block.parentheses.pascalabc",
+          "begin": "\\(\\*",
+          "beginCaptures": { "0": { "name": "punctuation.definition.comment.begin.pascalabc" } },
+          "end": "\\*\\)",
+          "endCaptures": { "0": { "name": "punctuation.definition.comment.end.pascalabc" } }
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.single.pascalabc",
+          "match": "'(?:''|[^'\\r\\n])*'"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        { "name": "constant.numeric.hex.pascalabc", "match": "(?i)(?<![\\w$])\\$[0-9a-f]+\\b" },
+        { "name": "constant.numeric.binary.pascalabc", "match": "(?<![\\w%])%[01]+\\b" },
+        { "name": "constant.numeric.float.pascalabc", "match": "(?i)\\b(?:\\d+\\.\\d*(?:e[+-]?\\d+)?|\\d+e[+-]?\\d+)\\b" },
+        { "name": "constant.numeric.integer.pascalabc", "match": "\\b\\d+\\b" }
+      ]
+    },
+    "declarations": {
+      "patterns": [
+        {
+          "name": "meta.function.pascalabc",
+          "match": "(?i)\\b(procedure|function|constructor|destructor|operator)\\s+(&?[A-Za-z_\\p{L}][\\w\\p{L}]*)",
+          "captures": {
+            "1": { "name": "storage.type.function.pascalabc" },
+            "2": { "name": "entity.name.function.pascalabc" }
+          }
+        }
+      ]
+    },
+    "types": {
+      "patterns": [
+        {
+          "name": "storage.type.pascalabc",
+          "match": "(?i)\\b(?:byte|shortint|smallint|integer|longint|int64|bigint|word|longword|uint64|real|single|double|decimal|boolean|char|string|object|pointer|set|file|record|class|interface|sequence)\\b"
+        }
+      ]
+    },
+    "keywords": {
+      "patterns": [
+        { "name": "keyword.control.block.pascalabc", "match": "(?i)\\b(?:begin|end)\\b" },
+        { "name": "storage.modifier.variable.pascalabc", "match": "(?i)\\bvar\\b" },
+        { "name": "keyword.control.import.pascalabc", "match": "(?i)\\buses\\b" },
+        { "name": "constant.language.pascalabc", "match": "(?i)\\b(?:true|false|nil)\\b" },
+        { "name": "keyword.operator.word.pascalabc", "match": "(?i)\\b(?:and|or|xor|not|div|mod|shl|shr|in|is|as)\\b" },
+        { "name": "keyword.control.pascalabc", "match": "(?i)\\b(?:if|then|else|case|of|for|foreach|to|downto|step|while|do|repeat|until|loop|with|match|when|try|except|finally|raise|yield|await|goto|on)\\b" },
+        { "name": "keyword.declaration.pascalabc", "match": "(?i)\\b(?:program|unit|library|namespace|interface|implementation|exports|initialization|finalization|label|const|resourcestring|type|threadvar|event|procedure|function|constructor|destructor|operator|property|array|set|file|record|class|sequence|template)\\b" },
+        { "name": "storage.modifier.pascalabc", "match": "(?i)\\b(?:public|private|protected|internal|static|auto|sealed|partial|abstract|virtual|override|overload|reintroduce|forward|external|extensionmethod|async|params|default|read|write|index|inherited|new|where|implicit|explicit)\\b" },
+        { "name": "keyword.other.pascalabc", "match": "(?i)\\b(?:asm|lock|sizeof|typeof)\\b" }
+      ]
+    }
+  }
+}

@@ -1,0 +1,111 @@
+{
+  "Begin/end block": {
+    "prefix": "begin",
+    "body": [
+      "begin",
+      "  $0",
+      "end"
+    ],
+    "description": "Create a begin/end block"
+  },
+  "If statement": {
+    "prefix": "if",
+    "body": [
+      "if ${1:condition} then",
+      "  ${2:}"
+    ],
+    "description": "Create an if statement"
+  },
+  "If/else statement": {
+    "prefix": "ifelse",
+    "body": [
+      "if ${1:condition} then",
+      "  $2",
+      "else",
+      "  $3"
+    ],
+    "description": "Create an if/else statement"
+  },
+  "For loop": {
+    "prefix": "for",
+    "body": [
+      "for var ${1:i} := 1 to ${2:n} do",
+      "  $3"
+    ],
+    "description": "Create an indexed for loop"
+  },
+  "Foreach loop": {
+    "prefix": "foreach",
+    "body": [
+      "foreach var ${1:x} in ${2:sequence} do",
+      "  $3"
+    ],
+    "description": "Create a foreach loop"
+  },
+  "While loop": {
+    "prefix": "while",
+    "body": [
+      "while ${1:condition} do",
+      "  $2"
+    ],
+    "description": "Create a while loop"
+  },
+  "Repeat/until loop": {
+    "prefix": "repeat",
+    "body": [
+      "repeat",
+      "  $1",
+      "until ${2:condition};"
+    ],
+    "description": "Create a repeat/until loop"
+  },
+  "Case statement": {
+    "prefix": "case",
+    "body": [
+      "case ${1:value} of",
+      "  $2: $3",
+      "  else",
+      "    $0",
+      "end;"
+    ],
+    "description": "Create a case statement"
+  },
+  "Procedure": {
+    "prefix": "procedure",
+    "body": [
+      "procedure ${1:Name}(${2:params});",
+      "begin",
+      "  $0",
+      "end;"
+    ],
+    "description": "Create a procedure"
+  },
+  "Function": {
+    "prefix": "function",
+    "body": [
+      "function ${1:Name}(${2:params}): ${3:type};",
+      "begin",
+      "  $0",
+      "end;"
+    ],
+    "description": "Create a function"
+  },
+  "Class": {
+    "prefix": "class",
+    "body": [
+      "class",
+      "  $0",
+      "end;"
+    ],
+    "description": "Create a class declaration"
+  },
+  "Record": {
+    "prefix": "record",
+    "body": [
+      "record",
+      "  $0",
+      "end;"
+    ],
+    "description": "Create a record declaration"
+  }
+}

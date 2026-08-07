@@ -1,0 +1,9 @@
+.vscode/**
+src/**
+node_modules/**
+tsconfig.json
+package-lock.json
+out/**/*.map
+bin/*.pas
+bin/*.pdb
+*.vsix
