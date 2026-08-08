@@ -1,9 +1,10 @@
 {
   "name": "pascalabc-net",
   "displayName": "PascalABC.NET",
-  "description": "PascalABC.NET support for Visual Studio Code",
-  "version": "0.0.1",
+  "description": "Language support, compilation, and execution for PascalABC.NET in Visual Studio Code",
+  "version": "0.1.0",
   "publisher": "pascalabcnet",
+  "preview": true,
   "license": "LGPL-3.0-only",
   "repository": {
     "type": "git",
@@ -17,7 +18,14 @@
     "vscode": "^1.100.0"
   },
   "categories": [
-    "Programming Languages"
+    "Programming Languages",
+    "Education"
+  ],
+  "keywords": [
+    "PascalABC.NET",
+    "Pascal",
+    "education",
+    "compiler"
   ],
   "main": "./out/extension.js",
   "contributes": {

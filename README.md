@@ -65,7 +65,7 @@ To prepare the runtime, restore Node.js dependencies, compile TypeScript, and pa
 scripts\build-vsix.cmd
 ```
 
-The resulting file is named from the extension version in `package.json`, for example `pascalabc-net-0.0.1.vsix`.
+The resulting file is named from the extension version in `package.json`, for example `pascalabc-net-0.1.0.vsix`.
 
 ## Building a VSIX
 
@@ -82,7 +82,7 @@ The generated `.vsix` file is ignored by Git.
 To install it locally:
 
 ```powershell
-code --install-extension .\pascalabc-net-0.0.1.vsix
+code --install-extension .\pascalabc-net-0.1.0.vsix
 ```
 
 ## Commands
