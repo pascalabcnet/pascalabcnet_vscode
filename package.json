@@ -5,6 +5,14 @@
   "version": "0.0.1",
   "publisher": "pascalabcnet",
   "license": "LGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pascalabcnet/pascalabcnet_vscode.git"
+  },
+  "homepage": "https://github.com/pascalabcnet/pascalabcnet_vscode#readme",
+  "bugs": {
+    "url": "https://github.com/pascalabcnet/pascalabcnet_vscode/issues"
+  },
   "engines": {
     "vscode": "^1.100.0"
   },
