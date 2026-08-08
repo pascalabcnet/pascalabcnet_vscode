@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$PascalABCPath = "${env:ProgramFiles(x86)}\PascalABC.NET"
+    [string]$PascalABCSourcePath = ''
 )
 
 Set-StrictMode -Version Latest
@@ -41,7 +41,7 @@ $vsixPath = Join-Path $repositoryRoot $vsixName
 Push-Location $repositoryRoot
 try {
     Write-Host '=== Preparing PascalABC.NET runtime ==='
-    & $runtimeScript -PascalABCPath $PascalABCPath
+    & $runtimeScript -PascalABCSourcePath $PascalABCSourcePath
     Assert-LastExitCode 'Runtime build'
 
     Write-Host '=== Restoring Node.js dependencies ==='

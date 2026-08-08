@@ -1,8 +1,10 @@
 .vscode/**
+.gitmodules
 .gitignore
 .gitattributes
 src/**
 compiler-host/**
+external/**
 scripts/**
 node_modules/**
 tsconfig.json

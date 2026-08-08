@@ -15,7 +15,7 @@ Visual Studio Code extension providing basic language support, compilation, and 
 
 ## Requirements
 
-The compilation bridge currently runs on Windows and requires the PascalABC.NET compiler runtime. Runtime binaries and libraries are generated or copied into `bin/` and are intentionally not stored in this repository.
+The compilation bridge currently runs on Windows. Its compiler runtime is built from the PascalABC.NET sources pinned in the [`external/pascalabcnet`](external/pascalabcnet/) Git submodule. Generated runtime files are placed in `bin/` and are intentionally not stored in this repository.
 
 The extension expects these entry points in `bin/` when the bundled runtime is used:
 
@@ -32,9 +32,21 @@ The sources of the compilation bridge are stored in [`compiler-host`](compiler-h
 
 Temporary prebuilt NetMQ dependencies used to build and stage the compilation bridge are stored in `compiler-host/dependencies/netmq`. They are copied into the generated `bin/` directory during runtime preparation. In the future these dependencies can be built from source for the required platform.
 
-PascalABC.NET itself is planned to be connected to this repository separately as a Git submodule. It is not included yet.
+Standard PascalABC.NET modules are rebuilt into PCU files by the same compiler build and packaged together with their Pascal sources. A reduced module set is used: `ABCHouse`, `ABCSprites`, `Arrays`, `BBCMicrobit`, `BlockFileOfT`, `ClientServer`, `Collections`, `Core`, `Events`, `MPI`, `Oberon00System`, `OpenCL`, `OpenCLABC`, `OpenGL`, `OpenGLABC`, `PointRect`, and `VCL` are currently omitted. `Graph3D` is included and expects its HelixToolkit dependencies to be available through the regular PascalABC.NET installation/GAC.
 
 ## Development
+
+Clone the repository together with its submodule:
+
+```powershell
+git clone --recurse-submodules https://github.com/pascalabcnet/pascalabcnet_vscode.git
+```
+
+For an existing clone, initialize or update the pinned submodule with:
+
+```powershell
+git submodule update --init --recursive
+```
 
 Install the Node.js dependencies and compile the TypeScript extension:
 
@@ -45,7 +57,7 @@ npm run compile
 
 Open the repository in Visual Studio Code and press `F5` to launch an Extension Development Host window.
 
-Prepare a clean compiler runtime from a standard local PascalABC.NET installation:
+Preparing the runtime requires the .NET SDK used by the pinned PascalABC.NET sources. Build a clean runtime from the submodule with:
 
 ```powershell
 .\scripts\build-runtime.ps1
@@ -57,7 +69,7 @@ From Command Prompt (`cmd.exe`), use the wrapper:
 scripts\build-runtime.cmd
 ```
 
-By default the script uses `C:\Program Files (x86)\PascalABC.NET`. A different installation can be selected with `-PascalABCPath`. The script stages and validates the new runtime before replacing the generated `bin/` directory.
+The script builds the compiler solution, rebuilds the standard PCU modules, builds the controller and worker, then stages and validates the new runtime before atomically replacing the generated `bin/` directory. A different PascalABC.NET source checkout can be selected with `-PascalABCSourcePath`.
 
 To prepare the runtime, restore Node.js dependencies, compile TypeScript, and package the complete VSIX in one step from Command Prompt, run:
 

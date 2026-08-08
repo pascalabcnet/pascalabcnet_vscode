@@ -6,6 +6,8 @@ All notable changes to the PascalABC.NET extension are documented in this file.
 
 Initial public preview.
 
+> The bundled Windows compiler runtime is built from the PascalABC.NET sources pinned as a Git submodule. Standard PCU modules are rebuilt with the same compiler build.
+
 ### Added
 
 - PascalABC.NET syntax highlighting, language configuration, and snippets.

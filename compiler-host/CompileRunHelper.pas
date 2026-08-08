@@ -13,7 +13,6 @@ unit CompileRunHelper;
 {$reference SyntaxTreeConverters.dll}
 {$reference SyntaxVisitors.dll}
 {$reference TreeConverter.dll}
-{$reference YieldHelpers.dll}
 
 uses PascalABCCompiler.Errors;
 uses System.IO;

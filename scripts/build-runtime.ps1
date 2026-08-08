@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$PascalABCPath = "${env:ProgramFiles(x86)}\PascalABC.NET"
+    [string]$PascalABCSourcePath = ''
 )
 
 Set-StrictMode -Version Latest
@@ -9,6 +9,11 @@ $ErrorActionPreference = 'Stop'
 $repositoryRoot = [System.IO.Path]::GetFullPath(
     (Join-Path $PSScriptRoot '..')
 )
+if ([string]::IsNullOrWhiteSpace($PascalABCSourcePath)) {
+    $PascalABCSourcePath = Join-Path $repositoryRoot 'external\pascalabcnet'
+}
+$PascalABCSourcePath = [System.IO.Path]::GetFullPath($PascalABCSourcePath)
+$pascalABCRuntimeRoot = Join-Path $PascalABCSourcePath 'bin'
 $compilerHostRoot = Join-Path $repositoryRoot 'compiler-host'
 $dependencyRoot = Join-Path $compilerHostRoot 'dependencies\netmq'
 $buildRoot = Join-Path $repositoryRoot '.build'
@@ -16,7 +21,28 @@ $hostBuildRoot = Join-Path $buildRoot 'compiler-host'
 $nextBinRoot = Join-Path $buildRoot 'bin-next'
 $backupBinRoot = Join-Path $buildRoot 'bin-backup'
 $outputBinRoot = Join-Path $repositoryRoot 'bin'
-$compilerPath = Join-Path $PascalABCPath 'pabcnetcclear.exe'
+$compilerPath = Join-Path $pascalABCRuntimeRoot 'pabcnetcclear.exe'
+$standardModulesCompilerPath = Join-Path $pascalABCRuntimeRoot 'pabcnetc.exe'
+
+$excludedStandardModules = @(
+    'ABCHouse',
+    'ABCSprites',
+    'Arrays',
+    'BBCMicrobit',
+    'BlockFileOfT',
+    'ClientServer',
+    'Collections',
+    'Core',
+    'Events',
+    'MPI',
+    'Oberon00System',
+    'OpenCL',
+    'OpenCLABC',
+    'OpenGL',
+    'OpenGLABC',
+    'PointRect',
+    'VCL'
+)
 
 $compilerDlls = @(
     'Compiler.dll',
@@ -37,8 +63,7 @@ $compilerDlls = @(
     'SyntaxTreeConverters.dll',
     'SyntaxVisitors.dll',
     'System.ValueTuple.dll',
-    'TreeConverter.dll',
-    'YieldHelpers.dll'
+    'TreeConverter.dll'
 )
 
 $hostDependencies = @(
@@ -138,7 +163,7 @@ or close the Extension Development Host, and then rerun this script.
 "@
 }
 
-function Copy-PascalLibrarySources {
+function Copy-PascalLibraryArtifacts {
     param(
         [string]$SourceRoot,
         [string]$DestinationRoot
@@ -149,10 +174,13 @@ function Copy-PascalLibrarySources {
 
     $sourcePrefix = [System.IO.Path]::GetFullPath($SourceRoot).TrimEnd('\') + '\'
     $sourceFiles = @(Get-ChildItem -LiteralPath $SourceRoot -Recurse -File |
-        Where-Object { $_.Extension -ieq '.pas' })
+        Where-Object {
+            $_.Extension -in @('.pas', '.pcu') -and
+            $_.BaseName -notin $excludedStandardModules
+        })
 
     if ($sourceFiles.Count -eq 0) {
-        throw "No Pascal library sources were found in: $SourceRoot"
+        throw "No Pascal library artifacts were found in: $SourceRoot"
     }
 
     foreach ($sourceFile in $sourceFiles) {
@@ -167,7 +195,56 @@ function Copy-PascalLibrarySources {
         Copy-Item -LiteralPath $sourceFile.FullName -Destination $targetPath
     }
 
-    Write-Host "Copied $($sourceFiles.Count) Pascal library sources."
+    $pasCount = @($sourceFiles | Where-Object Extension -ieq '.pas').Count
+    $pcuCount = @($sourceFiles | Where-Object Extension -ieq '.pcu').Count
+    if ($pcuCount -eq 0) {
+        throw "No compiled Pascal units were found in: $SourceRoot"
+    }
+
+    Write-Host "Copied $pasCount Pascal sources and $pcuCount compiled units."
+}
+
+function Invoke-PascalABCBuild {
+    Write-Host 'Building PascalABC.NET compiler from the pinned submodule commit...'
+    Push-Location $PascalABCSourcePath
+    try {
+        & dotnet build -c Release --no-incremental --nologo -v:minimal `
+            PascalABCNET.sln -p:PABCNET_LEGACY_ONLY=true
+        if ($LASTEXITCODE -ne 0) {
+            throw "PascalABC.NET build failed with exit code $LASTEXITCODE."
+        }
+    }
+    finally {
+        Pop-Location
+    }
+}
+
+function Invoke-StandardModulesBuild {
+    $generatorRoot = Join-Path $PascalABCSourcePath 'ReleaseGenerators'
+    $generatorSource = Join-Path $generatorRoot 'RebuildStandartModules.pas'
+    $libraryRoot = Join-Path $pascalABCRuntimeRoot 'Lib'
+    Assert-FileExists $standardModulesCompilerPath
+    Assert-FileExists $compilerPath
+    Assert-FileExists $generatorSource
+
+    Write-Host 'Rebuilding PascalABC.NET standard modules...'
+    Push-Location $generatorRoot
+    try {
+        if ([Console]::IsOutputRedirected) {
+            Get-ChildItem -LiteralPath $libraryRoot -Recurse -File -Filter '*.pcu' |
+                Remove-Item -Force
+            & $compilerPath 'RebuildStandartModules.pas'
+        }
+        else {
+            & $standardModulesCompilerPath 'RebuildStandartModules.pas' '/rebuild'
+        }
+        if ($LASTEXITCODE -ne 0) {
+            throw "Standard module build failed with exit code $LASTEXITCODE."
+        }
+    }
+    finally {
+        Pop-Location
+    }
 }
 
 function Invoke-PascalCompilation {
@@ -315,12 +392,27 @@ function Assert-RuntimeLayout {
     Assert-DirectoryExists $libraryRoot
     $unexpectedLibraryFiles = @(Get-ChildItem -LiteralPath $libraryRoot -Recurse -File |
         Where-Object {
-            $_.Extension -ine '.pas' -and $_.Name -ine 'turtle.png'
+            $_.Extension -notin @('.pas', '.pcu') -and
+            $_.Name -ine 'turtle.png'
         })
     if ($unexpectedLibraryFiles.Count -ne 0) {
         throw "Unexpected files in Lib: $($unexpectedLibraryFiles.FullName -join ', ')"
     }
     Assert-FileExists (Join-Path $libraryRoot 'turtle.png')
+
+    $compiledUnits = @(Get-ChildItem -LiteralPath $libraryRoot -Recurse -File `
+        -Filter '*.pcu')
+    if ($compiledUnits.Count -eq 0) {
+        throw 'No compiled Pascal units were included in the runtime.'
+    }
+    foreach ($excludedModule in $excludedStandardModules) {
+        foreach ($extension in @('.pas', '.pcu')) {
+            $excludedPath = Join-Path $libraryRoot ($excludedModule + $extension)
+            if (Test-Path -LiteralPath $excludedPath) {
+                throw "Excluded standard module was included: $excludedPath"
+            }
+        }
+    }
 
     $languageRoot = Join-Path $RuntimeRoot 'Lng'
     Assert-DirectoryExists $languageRoot
@@ -331,12 +423,12 @@ function Assert-RuntimeLayout {
     }
 }
 
-Write-Host "PascalABC.NET installation: $PascalABCPath"
-Assert-DirectoryExists $PascalABCPath
-Assert-FileExists $compilerPath
-Assert-DirectoryExists (Join-Path $PascalABCPath 'LibSource')
-Assert-DirectoryExists (Join-Path $PascalABCPath 'Lng\Eng')
-Assert-DirectoryExists (Join-Path $PascalABCPath 'Lng\Rus')
+Write-Host "PascalABC.NET source: $PascalABCSourcePath"
+Assert-DirectoryExists $PascalABCSourcePath
+Assert-FileExists (Join-Path $PascalABCSourcePath 'PascalABCNET.sln')
+Assert-DirectoryExists (Join-Path $pascalABCRuntimeRoot 'Lib')
+Assert-DirectoryExists (Join-Path $pascalABCRuntimeRoot 'Lng\Eng')
+Assert-DirectoryExists (Join-Path $pascalABCRuntimeRoot 'Lng\Rus')
 
 foreach ($sourceName in $hostSources) {
     Assert-FileExists (Join-Path $compilerHostRoot $sourceName)
@@ -344,11 +436,15 @@ foreach ($sourceName in $hostSources) {
 foreach ($dependencyName in $hostDependencies) {
     Assert-FileExists (Join-Path $dependencyRoot $dependencyName)
 }
-foreach ($dllName in $compilerDlls) {
-    Assert-FileExists (Join-Path $PascalABCPath $dllName)
-}
 
 Assert-OutputRuntimeNotInUse
+Invoke-PascalABCBuild
+Invoke-StandardModulesBuild
+
+Assert-FileExists $compilerPath
+foreach ($dllName in $compilerDlls) {
+    Assert-FileExists (Join-Path $pascalABCRuntimeRoot $dllName)
+}
 
 New-Item -ItemType Directory -Path $buildRoot -Force | Out-Null
 Remove-BuildDirectory $hostBuildRoot
@@ -358,21 +454,21 @@ New-Item -ItemType Directory -Path $hostBuildRoot | Out-Null
 New-Item -ItemType Directory -Path $nextBinRoot | Out-Null
 
 foreach ($dllName in $compilerDlls) {
-    Copy-RequiredFile (Join-Path $PascalABCPath $dllName) $nextBinRoot
+    Copy-RequiredFile (Join-Path $pascalABCRuntimeRoot $dllName) $nextBinRoot
 }
 foreach ($dependencyName in $hostDependencies) {
     Copy-RequiredFile (Join-Path $dependencyRoot $dependencyName) $nextBinRoot
 }
 
 $nextLibRoot = Join-Path $nextBinRoot 'Lib'
-Copy-PascalLibrarySources (Join-Path $PascalABCPath 'LibSource') $nextLibRoot
-Copy-RequiredFile (Join-Path $PascalABCPath 'Lib\turtle.png') $nextLibRoot
+Copy-PascalLibraryArtifacts (Join-Path $pascalABCRuntimeRoot 'Lib') $nextLibRoot
+Copy-RequiredFile (Join-Path $pascalABCRuntimeRoot 'Lib\turtle.png') $nextLibRoot
 
 $nextLanguageRoot = Join-Path $nextBinRoot 'Lng'
 New-Item -ItemType Directory -Path $nextLanguageRoot | Out-Null
-Copy-Item -LiteralPath (Join-Path $PascalABCPath 'Lng\Eng') `
+Copy-Item -LiteralPath (Join-Path $pascalABCRuntimeRoot 'Lng\Eng') `
     -Destination $nextLanguageRoot -Recurse
-Copy-Item -LiteralPath (Join-Path $PascalABCPath 'Lng\Rus') `
+Copy-Item -LiteralPath (Join-Path $pascalABCRuntimeRoot 'Lng\Rus') `
     -Destination $nextLanguageRoot -Recurse
 
 foreach ($sourceName in $hostSources) {
