@@ -38,7 +38,6 @@ const requiredCompilerComponents = [
     'System.Threading.Tasks.Extensions.dll',
     'System.ValueTuple.dll',
     'TreeConverter.dll',
-    'YieldHelpers.dll',
     'Lib',
     'Lng'
 ] as const;
