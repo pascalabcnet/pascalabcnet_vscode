@@ -322,7 +322,7 @@ export function activate(context: vscode.ExtensionContext): void {
                     ? 'Compiler controller stopped. It will start again on the next compilation.'
                     : 'Compiler controller is not running. It will start on the next compilation.'
             );
-            output.show(false);
+            output.show(true);
         }
     );
 
