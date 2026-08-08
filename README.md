@@ -1,8 +1,16 @@
 # PascalABC.NET for Visual Studio Code
 
-Visual Studio Code extension providing basic language support, compilation, and execution for PascalABC.NET programs.
+The official Visual Studio Code extension for writing, compiling, and running PascalABC.NET programs.
 
-## Features
+## About PascalABC.NET
+
+PascalABC.NET is a modern Pascal programming language that combines the simplicity and clarity of classic Pascal with contemporary language features and the capabilities of the Microsoft .NET platform.
+
+It supports procedural, object-oriented, and functional programming styles, making it well suited for teaching modern programming—from a beginner's first programs to university-level courses. Its concise and readable syntax helps students focus on algorithms, problem solving, and software design.
+
+PascalABC.NET is also a practical tool for console applications, educational and scientific projects, and general-purpose programming. It is free software distributed under the GNU LGPLv3 license.
+
+## Extension Features
 
 - PascalABC.NET syntax highlighting and language configuration
 - snippets for common language constructs
@@ -13,26 +21,19 @@ Visual Studio Code extension providing basic language support, compilation, and 
 - execution in an integrated terminal with console input support
 - commands for restarting the compiler process and showing its output
 
-## Requirements
+## Getting Started
 
-The compilation bridge currently runs on Windows. Its compiler runtime is built from the PascalABC.NET sources pinned in the [`external/pascalabcnet`](external/pascalabcnet/) Git submodule. Generated runtime files are placed in `bin/` and are intentionally not stored in this repository.
+1. Create a file using **File → New File → PascalABC.NET File**, or open an existing `.pas` file.
+2. Press `F9` to compile and run it.
+3. Use the integrated terminal for console input and program output.
 
-The extension expects these entry points in `bin/` when the bundled runtime is used:
+Compiler errors are displayed directly in the editor. `Ctrl+F9` compiles the current file without running it.
 
-- `PABCCompilerController.exe`
-- `ZMQServerPas.exe`
-- the required PascalABC.NET compiler DLLs
-- the `Lib` and `Lng` directories
+## Platform Support
 
-The sources of the compilation bridge are stored in [`compiler-host`](compiler-host/):
+This preview currently supports Windows. The compiler runtime required for ordinary PascalABC.NET programs is bundled with the extension, so a separate installation is not required for the basic compile-and-run workflow.
 
-- `PABCCompilerController.pas`
-- `ZMQServerPas.pas`
-- `CompileRunHelper.pas`
-
-Temporary prebuilt NetMQ dependencies used to build and stage the compilation bridge are stored in `compiler-host/dependencies/netmq`. They are copied into the generated `bin/` directory during runtime preparation. In the future these dependencies can be built from source for the required platform.
-
-Standard PascalABC.NET modules are rebuilt into PCU files by the same compiler build and packaged together with their Pascal sources. A reduced module set is used: `ABCHouse`, `ABCSprites`, `Arrays`, `BBCMicrobit`, `BlockFileOfT`, `ClientServer`, `Collections`, `Core`, `Events`, `MPI`, `Oberon00System`, `OpenCL`, `OpenCLABC`, `OpenGL`, `OpenGLABC`, `PointRect`, and `VCL` are currently omitted. `Graph3D` is included and expects its HelixToolkit dependencies to be available through the regular PascalABC.NET installation/GAC.
+Some optional modules depend on components normally installed with the full PascalABC.NET distribution. For example, `Graph3D` expects HelixToolkit and `NUnitABC` expects NUnit.
 
 ## Development
 
