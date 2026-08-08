@@ -391,9 +391,9 @@ export function activate(context: vscode.ExtensionContext): void {
                 return;
             }
 
-            const saved = await document.save();
+            const savedDocument = await saveDocument(document);
 
-            if (!saved) {
+            if (!savedDocument && document.uri.scheme !== 'untitled') {
                 void vscode.window.showErrorMessage(
                     'Не удалось сохранить файл.'
                 );
@@ -443,6 +443,24 @@ function getNewProgramUri(): vscode.Uri {
                 : vscode.Uri.parse(`untitled:${fileName}`);
         }
     }
+}
+
+async function saveDocument(
+    document: vscode.TextDocument
+): Promise<vscode.TextDocument | undefined> {
+    if (document.uri.scheme === 'untitled') {
+        await vscode.commands.executeCommand(
+            'workbench.action.files.saveAs'
+        );
+
+        const savedDocument = vscode.window.activeTextEditor?.document;
+
+        return savedDocument?.uri.scheme === 'file'
+            ? savedDocument
+            : undefined;
+    }
+
+    return await document.save() ? document : undefined;
 }
 
 interface CompletionDefinition {
@@ -639,19 +657,9 @@ async function performCompileActiveDocument(
                     return;
                 }
 
-                const saved = await document.save();
+                const savedDocument = await saveDocument(document);
 
-                if (!saved) {
-                    return;
-                }
-
-                const savedDocument =
-                    vscode.window.activeTextEditor?.document;
-
-                if (!savedDocument || savedDocument.uri.scheme !== 'file') {
-                    void vscode.window.showErrorMessage(
-                        'Не удалось получить путь сохранённого файла.'
-                    );
+                if (!savedDocument) {
                     return;
                 }
 
