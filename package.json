@@ -180,6 +180,12 @@
         "command": "pascalabc.compileCurrentFile",
         "key": "ctrl+f9",
         "when": "editorLangId == pascalabc"
+      },
+      {
+        "command": "pascalabc.saveFile",
+        "key": "ctrl+s",
+        "mac": "cmd+s",
+        "when": "editorLangId == pascalabc && resourceScheme == untitled"
       }
     ],
     "menus": {
