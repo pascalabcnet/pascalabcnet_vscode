@@ -5,6 +5,7 @@
   "version": "0.1.0",
   "publisher": "pascalabcnet",
   "preview": true,
+  "icon": "images/pascalabc-net.png",
   "license": "LGPL-3.0-only",
   "repository": {
     "type": "git",
