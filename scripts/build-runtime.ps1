@@ -105,6 +105,39 @@ function Copy-RequiredFile {
     Copy-Item -LiteralPath $Source -Destination $DestinationDirectory
 }
 
+function Assert-OutputRuntimeNotInUse {
+    if (-not (Test-Path -LiteralPath $outputBinRoot -PathType Container)) {
+        return
+    }
+
+    $binPrefix = [System.IO.Path]::GetFullPath($outputBinRoot).TrimEnd('\') + '\'
+    $runtimeProcesses = @(Get-Process `
+        -Name 'PABCCompilerController', 'ZMQServerPas' `
+        -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.Path -and
+            $_.Path.StartsWith(
+                $binPrefix,
+                [System.StringComparison]::OrdinalIgnoreCase
+            )
+        })
+
+    if ($runtimeProcesses.Count -eq 0) {
+        return
+    }
+
+    $processList = $runtimeProcesses |
+        ForEach-Object { "$($_.ProcessName).exe (PID $($_.Id))" }
+
+    throw @"
+The generated bin directory is currently in use by:
+  $($processList -join "`n  ")
+
+In VS Code run "PascalABC.NET: Restart Compiler" without compiling again,
+or close the Extension Development Host, and then rerun this script.
+"@
+}
+
 function Copy-PascalLibrarySources {
     param(
         [string]$SourceRoot,
@@ -315,6 +348,8 @@ foreach ($dllName in $compilerDlls) {
     Assert-FileExists (Join-Path $PascalABCPath $dllName)
 }
 
+Assert-OutputRuntimeNotInUse
+
 New-Item -ItemType Directory -Path $buildRoot -Force | Out-Null
 Remove-BuildDirectory $hostBuildRoot
 Remove-BuildDirectory $nextBinRoot
@@ -361,6 +396,7 @@ Copy-RequiredFile (Join-Path $hostBuildRoot 'ZMQServerPas.exe') $nextBinRoot
 
 Assert-RuntimeLayout $nextBinRoot
 Test-CompilerRuntime $nextBinRoot
+Assert-OutputRuntimeNotInUse
 
 if (Test-Path -LiteralPath $outputBinRoot) {
     Move-Item -LiteralPath $outputBinRoot -Destination $backupBinRoot

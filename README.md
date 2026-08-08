@@ -59,6 +59,14 @@ scripts\build-runtime.cmd
 
 By default the script uses `C:\Program Files (x86)\PascalABC.NET`. A different installation can be selected with `-PascalABCPath`. The script stages and validates the new runtime before replacing the generated `bin/` directory.
 
+To prepare the runtime, restore Node.js dependencies, compile TypeScript, and package the complete VSIX in one step from Command Prompt, run:
+
+```bat
+scripts\build-vsix.cmd
+```
+
+The resulting file is named from the extension version in `package.json`, for example `pascalabc-net-0.0.1.vsix`.
+
 ## Building a VSIX
 
 Before packaging, make sure that `bin/` contains the complete compiler runtime required by the extension. Then run:
