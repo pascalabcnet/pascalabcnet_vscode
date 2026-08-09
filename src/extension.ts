@@ -768,14 +768,22 @@ async function performCompileActiveDocument(
                 document = savedDocument;
             }
 
-            if (document.uri.scheme !== 'file') {
+            const sourceFileName = document.uri.scheme === 'file'
+                ? document.uri.fsPath
+                : document.fileName;
+            const sourceExistsOnDisk = isFileOnDisk(sourceFileName);
+
+            if (!sourceExistsOnDisk) {
+                output.appendLine(
+                    `Cannot compile document URI: ${document.uri.toString()}`
+                );
                 void vscode.window.showErrorMessage(
                     'Можно компилировать только файл на диске.'
                 );
                 return;
             }
 
-            if (path.extname(document.fileName).toLowerCase() !== '.pas') {
+            if (path.extname(sourceFileName).toLowerCase() !== '.pas') {
                 void vscode.window.showErrorMessage(
                     'Текущий файл не имеет расширения .pas.'
                 );
@@ -831,12 +839,12 @@ async function performCompileActiveDocument(
             output.show(true);
             output.appendLine('');
             output.appendLine(
-                `Compiling ${document.fileName} with ${compilerProfile.label}`
+                `Compiling ${sourceFileName} with ${compilerProfile.label}`
             );
 
             try {
                 const response =
-                    await controller.compile(document.fileName);
+                    await controller.compile(sourceFileName);
 
                 publishDiagnostics(response, diagnostics);
 
@@ -857,18 +865,18 @@ async function performCompileActiveDocument(
 
                     if (runAfterSuccess) {
                         const editorBeforeRun = vscode.window.activeTextEditor;
-                        const sourceExtension = path.extname(document.fileName);
+                        const sourceExtension = path.extname(sourceFileName);
                         const reportedOutputFile = response.outputFile?.trim() ||
-                            document.fileName.slice(0, -sourceExtension.length) + '.exe';
+                            sourceFileName.slice(0, -sourceExtension.length) + '.exe';
                         const outputFile = path.isAbsolute(reportedOutputFile)
                             ? reportedOutputFile
                             : path.resolve(
-                                path.dirname(document.fileName),
+                                path.dirname(sourceFileName),
                                 reportedOutputFile
                             );
 
                         const workingDirectory =
-                            path.dirname(document.fileName);
+                            path.dirname(sourceFileName);
 
                         runTerminal ??= vscode.window.terminals.find(
                             terminal => terminal.name === 'PascalABC.NET'
@@ -981,6 +989,18 @@ function findMissingCompilerComponents(
     ];
 
     return candidates.filter(candidate => !fs.existsSync(candidate));
+}
+
+function isFileOnDisk(fileName: string): boolean {
+    if (!path.isAbsolute(fileName)) {
+        return false;
+    }
+
+    try {
+        return fs.statSync(fileName).isFile();
+    } catch {
+        return false;
+    }
 }
 
 async function waitForInitialShellPrompt(
