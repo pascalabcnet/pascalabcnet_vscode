@@ -22,11 +22,23 @@ PascalABC.NET is also a practical tool for console applications, educational and
 - selectable .NET Framework 4.7.2 and .NET 10 compiler runtimes
 - commands for restarting the compiler process and showing its output
 
+## Two Compiler Targets
+
+The extension includes two independent PascalABC.NET compiler runtimes:
+
+| Target | Best suited for | Program launch |
+| --- | --- | --- |
+| .NET Framework 4.7.2 | compatibility with the classic PascalABC.NET environment | runs the generated `.exe` directly |
+| .NET 10 | modern .NET applications and current platform capabilities | runs the generated `.exe` with `dotnet` |
+
+Select the target from the **PascalABC.NET** item in the status bar or run **PascalABC.NET: Select Compiler Target** from the Command Palette. Each target has its own compiler assemblies and compatible precompiled standard units.
+
 ## Getting Started
 
 1. Create a file using **File → New File → PascalABC.NET File**, or open an existing `.pas` file.
-2. Press `F9` to compile and run it.
-3. Use the integrated terminal for console input and program output.
+2. If needed, select **.NET Framework 4.7.2** or **.NET 10** from the PascalABC.NET status bar item.
+3. Press `F9` to compile and run it.
+4. Use the integrated terminal for console input and program output.
 
 Compiler errors are displayed directly in the editor. `Ctrl+F9` compiles the current file without running it.
 
@@ -34,7 +46,7 @@ Compiler errors are displayed directly in the editor. `Ctrl+F9` compiles the cur
 
 This preview currently supports Windows. The compiler runtime required for ordinary PascalABC.NET programs is bundled with the extension, so a separate installation is not required for the basic compile-and-run workflow.
 
-The compiler target can be selected from the PascalABC.NET item in the status bar or with **PascalABC.NET: Select Compiler Target**. The classic .NET Framework runtime is selected by default. The .NET 10 target requires the .NET 10 runtime and launches compiled programs with `dotnet`.
+The classic .NET Framework runtime is selected by default. The .NET 10 target requires the .NET 10 runtime to be installed on the computer.
 
 Some optional modules depend on components normally installed with the full PascalABC.NET distribution. For example, `Graph3D` expects HelixToolkit and `NUnitABC` expects NUnit.
 
@@ -81,7 +93,7 @@ To prepare the runtime, restore Node.js dependencies, compile TypeScript, and pa
 scripts\build-vsix.cmd
 ```
 
-The resulting file is named from the extension version in `package.json`, for example `pascalabc-net-0.1.0.vsix`.
+The resulting file is named from the extension version in `package.json`, for example `pascalabc-net-0.2.0.vsix`.
 
 ## Building a VSIX
 
@@ -98,7 +110,7 @@ The generated `.vsix` file is ignored by Git.
 To install it locally:
 
 ```powershell
-code --install-extension .\pascalabc-net-0.1.0.vsix
+code --install-extension .\pascalabc-net-0.2.0.vsix
 ```
 
 ## Commands

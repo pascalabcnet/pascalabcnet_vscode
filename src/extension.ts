@@ -1,5 +1,9 @@
 import * as vscode from 'vscode';
-import { ChildProcessWithoutNullStreams, spawn } from 'child_process';
+import {
+    ChildProcessWithoutNullStreams,
+    execFile,
+    spawn
+} from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline';
@@ -8,6 +12,7 @@ let controller: CompilerController | undefined;
 let runTerminal: vscode.Terminal | undefined;
 let activeRunExecution: vscode.TerminalShellExecution | undefined;
 let compilationInProgress = false;
+let compilationGeneration = 0;
 
 type CompilerTarget = 'net-framework' | 'net10';
 
@@ -18,6 +23,10 @@ interface CompilerProfile {
     command: string;
     args: string[];
     requiredComponents: readonly string[];
+}
+
+interface CompilerTargetQuickPickItem extends vscode.QuickPickItem {
+    target: CompilerTarget;
 }
 
 const legacyRequiredCompilerComponents = [
@@ -99,6 +108,13 @@ interface PendingRequest {
     resolve: (response: CompileResponse) => void;
     reject: (error: Error) => void;
     timer: NodeJS.Timeout;
+}
+
+class CompilerControllerStoppedError extends Error {
+    public constructor() {
+        super('Compiler controller was stopped.');
+        this.name = 'CompilerControllerStoppedError';
+    }
 }
 
 class CompilerController implements vscode.Disposable {
@@ -272,6 +288,7 @@ class CompilerController implements vscode.Disposable {
 
         const process = this.process;
         this.process = undefined;
+        this.failAllRequests(new CompilerControllerStoppedError());
 
         if (!process || process.exitCode !== null) {
             return;
@@ -361,6 +378,7 @@ export function activate(context: vscode.ExtensionContext): void {
         () => {
             const wasRunning = controller !== undefined;
 
+            invalidateActiveCompilation();
             controller?.dispose();
             controller = undefined;
             diagnostics.clear();
@@ -379,26 +397,7 @@ export function activate(context: vscode.ExtensionContext): void {
         'pascalabc.selectCompilerTarget',
         async () => {
             const currentTarget = getCompilerTarget();
-            const selected = await vscode.window.showQuickPick(
-                [
-                    {
-                        label: '.NET Framework 4.7.2',
-                        description: 'Classic PascalABC.NET runtime',
-                        target: 'net-framework' as CompilerTarget
-                    },
-                    {
-                        label: '.NET 10',
-                        description: 'Modern cross-platform runtime',
-                        target: 'net10' as CompilerTarget
-                    }
-                ],
-                {
-                    title: 'Select PascalABC.NET compiler',
-                    placeHolder: currentTarget === 'net10'
-                        ? '.NET 10'
-                        : '.NET Framework 4.7.2'
-                }
-            );
+            const selected = await showCompilerTargetQuickPick(currentTarget);
 
             if (!selected || selected.target === currentTarget) {
                 return;
@@ -420,6 +419,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
             controller?.dispose();
             controller = undefined;
+            invalidateActiveCompilation();
             diagnostics.clear();
             updateCompilerStatus(compilerStatus);
             output.appendLine(
@@ -512,6 +512,45 @@ export function activate(context: vscode.ExtensionContext): void {
         openFileCommand,
         saveFileCommand
     );
+}
+
+function showCompilerTargetQuickPick(
+    currentTarget: CompilerTarget
+): Promise<CompilerTargetQuickPickItem | undefined> {
+    const items: CompilerTargetQuickPickItem[] = [
+        {
+            label: '.NET Framework 4.7.2',
+            description: 'Classic PascalABC.NET runtime',
+            target: 'net-framework'
+        },
+        {
+            label: '.NET 10',
+            description: 'Modern .NET runtime',
+            target: 'net10'
+        }
+    ];
+    const quickPick = vscode.window.createQuickPick<CompilerTargetQuickPickItem>();
+    quickPick.title = 'Select PascalABC.NET compiler';
+    quickPick.placeholder = 'Choose a compiler target';
+    quickPick.items = items;
+    quickPick.activeItems = items.filter(item => item.target === currentTarget);
+
+    return new Promise(resolve => {
+        let accepted = false;
+
+        quickPick.onDidAccept(() => {
+            accepted = true;
+            resolve(quickPick.selectedItems[0]);
+            quickPick.hide();
+        });
+        quickPick.onDidHide(() => {
+            if (!accepted) {
+                resolve(undefined);
+            }
+            quickPick.dispose();
+        });
+        quickPick.show();
+    });
 }
 
 function getNewProgramUri(): vscode.Uri {
@@ -712,12 +751,20 @@ async function compileActiveDocument(
     runAfterSuccess: boolean
 ): Promise<void> {
     if (compilationInProgress) {
-        void vscode.window.showInformationMessage(
-            'PascalABC.NET: компиляция уже выполняется.'
+        const action = await vscode.window.showWarningMessage(
+            'PascalABC.NET: компиляция уже выполняется.',
+            'Перезапустить компилятор'
         );
+
+        if (action === 'Перезапустить компилятор') {
+            await vscode.commands.executeCommand(
+                'pascalabc.restartCompiler'
+            );
+        }
         return;
     }
 
+    const generation = ++compilationGeneration;
     compilationInProgress = true;
 
     try {
@@ -728,8 +775,15 @@ async function compileActiveDocument(
             runAfterSuccess
         );
     } finally {
-        compilationInProgress = false;
+        if (compilationGeneration === generation) {
+            compilationInProgress = false;
+        }
     }
+}
+
+function invalidateActiveCompilation(): void {
+    compilationGeneration++;
+    compilationInProgress = false;
 }
 
 async function performCompileActiveDocument(
@@ -825,6 +879,17 @@ async function performCompileActiveDocument(
                     void vscode.window.showErrorMessage(
                         'PascalABC.NET compiler components were not found.'
                     );
+                    return;
+                }
+
+                const runtimeError =
+                    await getCompilerRuntimeError(compilerProfile);
+
+                if (runtimeError) {
+                    output.appendLine('');
+                    output.appendLine(`[error] ${runtimeError}`);
+                    output.show(false);
+                    void vscode.window.showErrorMessage(runtimeError);
                     return;
                 }
 
@@ -966,12 +1031,22 @@ async function performCompileActiveDocument(
                     }
                 }
             } catch (error) {
+                if (error instanceof CompilerControllerStoppedError) {
+                    output.appendLine('Compiler request cancelled.');
+                    return;
+                }
+
                 const message =
                     error instanceof Error
                         ? error.message
                         : String(error);
 
                 output.appendLine(`Controller error: ${message}`);
+
+                if (message.includes('timed out')) {
+                    controller?.dispose();
+                    controller = undefined;
+                }
 
                 void vscode.window.showErrorMessage(
                     `PascalABC.NET: ${message}`
@@ -1001,6 +1076,36 @@ function isFileOnDisk(fileName: string): boolean {
     } catch {
         return false;
     }
+}
+
+async function getCompilerRuntimeError(
+    profile: CompilerProfile
+): Promise<string | undefined> {
+    if (profile.target !== 'net10') {
+        return undefined;
+    }
+
+    const runtimeList = await new Promise<string | undefined>(resolve => {
+        execFile(
+            'dotnet',
+            ['--list-runtimes'],
+            {
+                encoding: 'utf8',
+                timeout: 10_000,
+                windowsHide: true
+            },
+            (error, stdout) => {
+                resolve(error ? undefined : stdout);
+            }
+        );
+    });
+
+    if (runtimeList && /^Microsoft\.NETCore\.App\s+10\./m.test(runtimeList)) {
+        return undefined;
+    }
+
+    return '.NET 10 runtime was not found. Install Microsoft.NETCore.App 10.x ' +
+        'or select .NET Framework 4.7.2.';
 }
 
 async function waitForInitialShellPrompt(

@@ -2,7 +2,7 @@
   "name": "pascalabc-net",
   "displayName": "PascalABC.NET",
   "description": "Official PascalABC.NET language support, compilation, and execution for Visual Studio Code",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "publisher": "pascalabcnet",
   "preview": true,
   "icon": "images/pascalabc-net.png",
