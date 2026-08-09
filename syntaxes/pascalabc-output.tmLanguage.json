@@ -1,0 +1,11 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "PascalABC.NET Output",
+  "scopeName": "source.pascalabc-output",
+  "patterns": [
+    {
+      "match": "^\\[error\\]",
+      "name": "log.error.pascalabc-output"
+    }
+  ]
+}

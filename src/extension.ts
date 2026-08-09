@@ -9,7 +9,18 @@ let runTerminal: vscode.Terminal | undefined;
 let activeRunExecution: vscode.TerminalShellExecution | undefined;
 let compilationInProgress = false;
 
-const requiredCompilerComponents = [
+type CompilerTarget = 'net-framework' | 'net10';
+
+interface CompilerProfile {
+    target: CompilerTarget;
+    label: string;
+    runtimeDirectory: string;
+    command: string;
+    args: string[];
+    requiredComponents: readonly string[];
+}
+
+const legacyRequiredCompilerComponents = [
     'ZMQServerPas.exe',
     'AsyncIO.dll',
     'Compiler.dll',
@@ -37,6 +48,27 @@ const requiredCompilerComponents = [
     'System.Runtime.CompilerServices.Unsafe.dll',
     'System.Threading.Tasks.Extensions.dll',
     'System.ValueTuple.dll',
+    'TreeConverter.dll',
+    'Lib',
+    'Lng'
+] as const;
+
+const modernRequiredCompilerComponents = [
+    'PABCCompilerController.dll',
+    'PABCCompilerController.deps.json',
+    'PABCCompilerController.runtimeconfig.json',
+    'ZMQServerPas.dll',
+    'ZMQServerPas.deps.json',
+    'ZMQServerPas.runtimeconfig.json',
+    'Compiler.dll',
+    'CompilerTools.dll',
+    'Errors.dll',
+    'NETGenerator.dll',
+    'NetMQ.dll',
+    'PascalABCLanguageInfo.dll',
+    'PascalABCParser.dll',
+    'SemanticTree.dll',
+    'SyntaxTree.dll',
     'TreeConverter.dll',
     'Lib',
     'Lng'
@@ -76,7 +108,7 @@ class CompilerController implements vscode.Disposable {
     private readonly pending = new Map<number, PendingRequest>();
 
     public constructor(
-        private readonly executablePath: string,
+        private readonly profile: CompilerProfile,
         private readonly output: vscode.OutputChannel
     ) {
     }
@@ -95,15 +127,16 @@ class CompilerController implements vscode.Disposable {
             return;
         }
 
-        this.output.appendLine(`Starting compiler controller: ${this.executablePath}`);
-
-        const controllerDirectory = path.dirname(this.executablePath);
+        const commandDescription = [this.profile.command, ...this.profile.args]
+            .map(argument => argument.includes(' ') ? `"${argument}"` : argument)
+            .join(' ');
+        this.output.appendLine(`Starting compiler controller: ${commandDescription}`);
 
         this.process = spawn(
-            this.executablePath,
-            [],
+            this.profile.command,
+            this.profile.args,
             {
-                cwd: controllerDirectory,
+                cwd: this.profile.runtimeDirectory,
                 windowsHide: true,
                 stdio: ['pipe', 'pipe', 'pipe']
             }
@@ -269,9 +302,19 @@ interface PingResponse extends CompileResponse {
 }
 
 export function activate(context: vscode.ExtensionContext): void {
-    const output = vscode.window.createOutputChannel('PascalABC.NET');
+    const output = vscode.window.createOutputChannel(
+        'PascalABC.NET',
+        'pascalabc-output'
+    );
     const diagnostics =
         vscode.languages.createDiagnosticCollection('pascalabc');
+    const compilerStatus = vscode.window.createStatusBarItem(
+        vscode.StatusBarAlignment.Right,
+        100
+    );
+    compilerStatus.command = 'pascalabc.selectCompilerTarget';
+    compilerStatus.name = 'PascalABC.NET Compiler';
+    updateCompilerStatus(compilerStatus);
     const completionProvider =
         vscode.languages.registerCompletionItemProvider(
             { language: 'pascalabc' },
@@ -280,6 +323,7 @@ export function activate(context: vscode.ExtensionContext): void {
     context.subscriptions.push(
         output,
         diagnostics,
+        compilerStatus,
         completionProvider
     );
 
@@ -289,6 +333,11 @@ export function activate(context: vscode.ExtensionContext): void {
                 runTerminal = undefined;
                 activeRunExecution = undefined;
             }
+        })
+    );
+    context.subscriptions.push(
+        vscode.window.onDidChangeActiveTextEditor(() => {
+            updateCompilerStatus(compilerStatus);
         })
     );
 
@@ -324,6 +373,59 @@ export function activate(context: vscode.ExtensionContext): void {
             );
             output.show(true);
         }
+    );
+
+    const selectCompilerTargetCommand = vscode.commands.registerCommand(
+        'pascalabc.selectCompilerTarget',
+        async () => {
+            const currentTarget = getCompilerTarget();
+            const selected = await vscode.window.showQuickPick(
+                [
+                    {
+                        label: '.NET Framework 4.7.2',
+                        description: 'Classic PascalABC.NET runtime',
+                        target: 'net-framework' as CompilerTarget
+                    },
+                    {
+                        label: '.NET 10',
+                        description: 'Modern cross-platform runtime',
+                        target: 'net10' as CompilerTarget
+                    }
+                ],
+                {
+                    title: 'Select PascalABC.NET compiler',
+                    placeHolder: currentTarget === 'net10'
+                        ? '.NET 10'
+                        : '.NET Framework 4.7.2'
+                }
+            );
+
+            if (!selected || selected.target === currentTarget) {
+                return;
+            }
+
+            await vscode.workspace.getConfiguration('pascalabc').update(
+                'compilerTarget',
+                selected.target,
+                vscode.ConfigurationTarget.Global
+            );
+        }
+    );
+
+    context.subscriptions.push(
+        vscode.workspace.onDidChangeConfiguration(event => {
+            if (!event.affectsConfiguration('pascalabc.compilerTarget')) {
+                return;
+            }
+
+            controller?.dispose();
+            controller = undefined;
+            diagnostics.clear();
+            updateCompilerStatus(compilerStatus);
+            output.appendLine(
+                `Compiler target changed to ${getCompilerTargetLabel()}.`
+            );
+        })
     );
 
     const newFileCommand = vscode.commands.registerCommand(
@@ -405,6 +507,7 @@ export function activate(context: vscode.ExtensionContext): void {
         compileAndRunCommand,
         showOutputCommand,
         restartCompilerCommand,
+        selectCompilerTargetCommand,
         newFileCommand,
         openFileCommand,
         saveFileCommand
@@ -692,11 +795,11 @@ async function performCompileActiveDocument(
 
             diagnostics.delete(document.uri);
 
-            const controllerPath = resolveControllerPath(context);
+            const compilerProfile = resolveCompilerProfile(context);
 
             if (!controller) {
                 const missingComponents =
-                    findMissingCompilerComponents(controllerPath);
+                    findMissingCompilerComponents(compilerProfile);
 
                 if (missingComponents.length > 0) {
                     output.appendLine('');
@@ -718,7 +821,7 @@ async function performCompileActiveDocument(
                 }
 
                 controller = new CompilerController(
-                    controllerPath,
+                    compilerProfile,
                     output
                 );
 
@@ -727,7 +830,9 @@ async function performCompileActiveDocument(
 
             output.show(true);
             output.appendLine('');
-            output.appendLine(`Compiling ${document.fileName}`);
+            output.appendLine(
+                `Compiling ${document.fileName} with ${compilerProfile.label}`
+            );
 
             try {
                 const response =
@@ -783,10 +888,13 @@ async function performCompileActiveDocument(
                         const terminal = runTerminal;
                         terminal.show(false);
 
+                        const runCommand = compilerProfile.target === 'net10'
+                            ? `dotnet "${escapePowerShellDoubleQuoted(outputFile)}"`
+                            : `& "${escapePowerShellDoubleQuoted(outputFile)}"`;
                         const commandLine =
                             'Clear-Host; ' +
                             `Set-Location -LiteralPath "${escapePowerShellDoubleQuoted(workingDirectory)}"; ` +
-                            `& "${escapePowerShellDoubleQuoted(outputFile)}"`;
+                            runCommand;
 
                         const shellIntegration =
                             await waitForShellIntegration(terminal);
@@ -831,7 +939,7 @@ async function performCompileActiveDocument(
                     }
                 } else {
                     output.appendLine(
-                        response.message ?? 'Compilation failed'
+                        `[error] ${response.message ?? 'Compilation failed'}`
                     );
 
                     void vscode.window.showErrorMessage(
@@ -864,13 +972,11 @@ async function performCompileActiveDocument(
 }
 
 function findMissingCompilerComponents(
-    controllerPath: string
+    profile: CompilerProfile
 ): string[] {
-    const controllerDirectory = path.dirname(controllerPath);
     const candidates = [
-        controllerPath,
-        ...requiredCompilerComponents.map(component =>
-            path.join(controllerDirectory, component)
+        ...profile.requiredComponents.map(component =>
+            path.join(profile.runtimeDirectory, component)
         )
     ];
 
@@ -977,22 +1083,75 @@ function escapePowerShellDoubleQuoted(value: string): string {
         .replace(/"/g, '`"');
 }
 
-function resolveControllerPath(
+function getCompilerTarget(): CompilerTarget {
+    return vscode.workspace.getConfiguration('pascalabc').get<CompilerTarget>(
+        'compilerTarget',
+        'net-framework'
+    );
+}
+
+function getCompilerTargetLabel(): string {
+    return getCompilerTarget() === 'net10'
+        ? '.NET 10'
+        : '.NET Framework 4.7.2';
+}
+
+function updateCompilerStatus(status: vscode.StatusBarItem): void {
+    status.text = `$(tools) PascalABC.NET: ${getCompilerTargetLabel()}`;
+    status.tooltip = 'Select PascalABC.NET compiler target';
+    if (vscode.window.activeTextEditor?.document.languageId === 'pascalabc') {
+        status.show();
+    } else {
+        status.hide();
+    }
+}
+
+function resolveCompilerProfile(
     context: vscode.ExtensionContext
-): string {
+): CompilerProfile {
     const configuration =
         vscode.workspace.getConfiguration('pascalabc');
-
+    const target = getCompilerTarget();
     const configuredPath =
         configuration.get<string>('controllerPath', '').trim();
 
-    if (configuredPath !== '') {
-        return path.resolve(configuredPath);
+    if (target === 'net-framework') {
+        const controllerPath = configuredPath !== ''
+            ? path.resolve(configuredPath)
+            : context.asAbsolutePath(path.join(
+                'bin',
+                'net-framework',
+                'PABCCompilerController.exe'
+            ));
+        const runtimeDirectory = path.dirname(controllerPath);
+
+        return {
+            target,
+            label: '.NET Framework 4.7.2',
+            runtimeDirectory,
+            command: controllerPath,
+            args: [],
+            requiredComponents: [
+                path.basename(controllerPath),
+                ...legacyRequiredCompilerComponents
+            ]
+        };
     }
 
-    return context.asAbsolutePath(
-        path.join('bin', 'PABCCompilerController.exe')
+    const runtimeDirectory = context.asAbsolutePath(path.join('bin', 'net10'));
+    const controllerPath = path.join(
+        runtimeDirectory,
+        'PABCCompilerController.dll'
     );
+
+    return {
+        target,
+        label: '.NET 10',
+        runtimeDirectory,
+        command: 'dotnet',
+        args: [controllerPath],
+        requiredComponents: modernRequiredCompilerComponents
+    };
 }
 
 function publishDiagnostics(

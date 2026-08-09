@@ -20,6 +20,7 @@ uses System.Net.Sockets;
 uses System.Threading;
 uses System.Collections.Generic;
 uses System.Web.Script.Serialization;
+uses System.Text;
 uses System.Text.RegularExpressions;
 
 function CreateClient(address: string): RequestSocket;
@@ -478,6 +479,9 @@ begin
 end;
 
 begin
+  Console.InputEncoding := new UTF8Encoding(False);
+  Console.OutputEncoding := new UTF8Encoding(False);
+
   var serializer := new JavaScriptSerializer;
 
   var workerFileName :=

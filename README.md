@@ -19,6 +19,7 @@ PascalABC.NET is also a practical tool for console applications, educational and
 - compile current file with `Ctrl+F9`
 - compile and run with `F9`
 - execution in an integrated terminal with console input support
+- selectable .NET Framework 4.7.2 and .NET 10 compiler runtimes
 - commands for restarting the compiler process and showing its output
 
 ## Getting Started
@@ -32,6 +33,8 @@ Compiler errors are displayed directly in the editor. `Ctrl+F9` compiles the cur
 ## Platform Support
 
 This preview currently supports Windows. The compiler runtime required for ordinary PascalABC.NET programs is bundled with the extension, so a separate installation is not required for the basic compile-and-run workflow.
+
+The compiler target can be selected from the PascalABC.NET item in the status bar or with **PascalABC.NET: Select Compiler Target**. The classic .NET Framework runtime is selected by default. The .NET 10 target requires the .NET 10 runtime and launches compiled programs with `dotnet`.
 
 Some optional modules depend on components normally installed with the full PascalABC.NET distribution. For example, `Graph3D` expects HelixToolkit and `NUnitABC` expects NUnit.
 
@@ -106,6 +109,7 @@ code --install-extension .\pascalabc-net-0.1.0.vsix
 | PascalABC.NET: Compile Current File | `Ctrl+F9` |
 | PascalABC.NET: Show Output | — |
 | PascalABC.NET: Restart Compiler | — |
+| PascalABC.NET: Select Compiler Target | — |
 
 The keyboard shortcuts are active only for files with the `pascalabc` language identifier.
 

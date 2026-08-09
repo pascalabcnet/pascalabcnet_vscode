@@ -14,7 +14,12 @@ if ([string]::IsNullOrWhiteSpace($PascalABCSourcePath)) {
 }
 $PascalABCSourcePath = [System.IO.Path]::GetFullPath($PascalABCSourcePath)
 $pascalABCRuntimeRoot = Join-Path $PascalABCSourcePath 'bin'
+$modernPascalABCRuntimeRoot = Join-Path $PascalABCSourcePath 'bin-net10'
 $compilerHostRoot = Join-Path $repositoryRoot 'compiler-host'
+$controllerProjectPath = Join-Path $compilerHostRoot `
+    'Controller\PABCCompilerController.csproj'
+$workerProjectPath = Join-Path $compilerHostRoot `
+    'Worker\ZMQServerPas.csproj'
 $dependencyRoot = Join-Path $compilerHostRoot 'dependencies\netmq'
 $buildRoot = Join-Path $repositoryRoot '.build'
 $hostBuildRoot = Join-Path $buildRoot 'compiler-host'
@@ -23,6 +28,8 @@ $backupBinRoot = Join-Path $buildRoot 'bin-backup'
 $outputBinRoot = Join-Path $repositoryRoot 'bin'
 $compilerPath = Join-Path $pascalABCRuntimeRoot 'pabcnetcclear.exe'
 $standardModulesCompilerPath = Join-Path $pascalABCRuntimeRoot 'pabcnetc.exe'
+$modernCompilerPath = Join-Path $modernPascalABCRuntimeRoot `
+    'pabcnetcclear.exe'
 
 $excludedStandardModules = @(
     'ABCHouse',
@@ -44,7 +51,7 @@ $excludedStandardModules = @(
     'VCL'
 )
 
-$compilerDlls = @(
+$compilerCoreDlls = @(
     'Compiler.dll',
     'CompilerTools.dll',
     'Errors.dll',
@@ -62,9 +69,11 @@ $compilerDlls = @(
     'SyntaxTree.dll',
     'SyntaxTreeConverters.dll',
     'SyntaxVisitors.dll',
-    'System.ValueTuple.dll',
     'TreeConverter.dll'
 )
+
+$legacyCompilerDlls = @($compilerCoreDlls) + @('System.ValueTuple.dll')
+$modernCompilerDlls = @($compilerCoreDlls)
 
 $hostDependencies = @(
     'AsyncIO.dll',
@@ -75,12 +84,6 @@ $hostDependencies = @(
     'System.Numerics.Vectors.dll',
     'System.Runtime.CompilerServices.Unsafe.dll',
     'System.Threading.Tasks.Extensions.dll'
-)
-
-$hostSources = @(
-    'CompileRunHelper.pas',
-    'ZMQServerPas.pas',
-    'PABCCompilerController.pas'
 )
 
 function Assert-FileExists {
@@ -147,12 +150,28 @@ function Assert-OutputRuntimeNotInUse {
             )
         })
 
-    if ($runtimeProcesses.Count -eq 0) {
+    $modernRuntimeProcesses = @(Get-CimInstance Win32_Process `
+        -Filter "Name = 'dotnet.exe'" `
+        -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.CommandLine -and
+            $_.CommandLine.IndexOf(
+                $binPrefix,
+                [System.StringComparison]::OrdinalIgnoreCase
+            ) -ge 0
+        })
+
+    if ($runtimeProcesses.Count -eq 0 -and
+        $modernRuntimeProcesses.Count -eq 0) {
         return
     }
 
-    $processList = $runtimeProcesses |
-        ForEach-Object { "$($_.ProcessName).exe (PID $($_.Id))" }
+    $processList = @(
+        $runtimeProcesses |
+            ForEach-Object { "$($_.ProcessName).exe (PID $($_.Id))" }
+        $modernRuntimeProcesses |
+            ForEach-Object { "dotnet.exe (PID $($_.ProcessId))" }
+    )
 
     throw @"
 The generated bin directory is currently in use by:
@@ -204,6 +223,49 @@ function Copy-PascalLibraryArtifacts {
     Write-Host "Copied $pasCount Pascal sources and $pcuCount compiled units."
 }
 
+function Copy-LanguageResources {
+    param([string]$SourceRoot, [string]$DestinationRoot)
+
+    New-Item -ItemType Directory -Path $DestinationRoot | Out-Null
+    foreach ($languageName in @('Eng', 'Rus')) {
+        $sourceLanguageRoot = Join-Path $SourceRoot $languageName
+        Assert-DirectoryExists $sourceLanguageRoot
+        Copy-Item -LiteralPath $sourceLanguageRoot `
+            -Destination $DestinationRoot -Recurse
+    }
+}
+
+function Copy-HostOutput {
+    param(
+        [string]$SourceRoot,
+        [string]$DestinationRoot,
+        [string[]]$Suffixes
+    )
+
+    $sourcePrefix = [System.IO.Path]::GetFullPath($SourceRoot).TrimEnd('\') + '\'
+    foreach ($sourceFile in Get-ChildItem -LiteralPath $SourceRoot -Recurse -File) {
+        $matched = $false
+        foreach ($suffix in $Suffixes) {
+            if ($sourceFile.Name.EndsWith(
+                $suffix,
+                [System.StringComparison]::OrdinalIgnoreCase
+            )) {
+                $matched = $true
+                break
+            }
+        }
+        if (-not $matched -or $sourceFile.Extension -ieq '.pdb') {
+            continue
+        }
+
+        $relativePath = $sourceFile.FullName.Substring($sourcePrefix.Length)
+        $targetPath = Join-Path $DestinationRoot $relativePath
+        $targetDirectory = Split-Path -Parent $targetPath
+        New-Item -ItemType Directory -Path $targetDirectory -Force | Out-Null
+        Copy-Item -LiteralPath $sourceFile.FullName -Destination $targetPath -Force
+    }
+}
+
 function Invoke-PascalABCBuild {
     Write-Host 'Building PascalABC.NET compiler from the pinned submodule commit...'
     Push-Location $PascalABCSourcePath
@@ -247,18 +309,89 @@ function Invoke-StandardModulesBuild {
     }
 }
 
-function Invoke-PascalCompilation {
-    param([string]$SourceName)
+function Invoke-ModernPascalABCBuild {
+    $solutionPath = Join-Path $PascalABCSourcePath 'pabcnetc.sln'
+    $generatorRoot = Join-Path $PascalABCSourcePath 'ReleaseGenerators'
+    $generatorName = 'RebuildStandartModulesNet10'
+    $generatorSource = Join-Path $generatorRoot ($generatorName + '.pas')
+    $libraryRoot = Join-Path $modernPascalABCRuntimeRoot 'Lib'
 
-    Write-Host "Compiling $SourceName..."
-    $compilerOutput = & $compilerPath $SourceName 2>&1
+    Assert-FileExists $solutionPath
+    Assert-FileExists $generatorSource
 
+    Write-Host 'Building PascalABC.NET compiler for .NET 10...'
+    & dotnet build $solutionPath `
+        -c Release `
+        -p:TargetFramework=net10.0 `
+        -m:1 `
+        --nologo `
+        -v:minimal
     if ($LASTEXITCODE -ne 0) {
-        throw "PascalABC.NET failed to compile ${SourceName}:`n$compilerOutput"
+        throw "PascalABC.NET net10 build failed with exit code $LASTEXITCODE."
     }
 
-    if ($compilerOutput) {
-        Write-Host ($compilerOutput -join [Environment]::NewLine)
+    Assert-FileExists $modernCompilerPath
+    Assert-DirectoryExists $libraryRoot
+
+    Write-Host 'Rebuilding PascalABC.NET standard modules for .NET 10...'
+    Get-ChildItem -LiteralPath $libraryRoot -Recurse -File -Filter '*.pcu' |
+        Remove-Item -Force
+
+    Push-Location $generatorRoot
+    try {
+        & $modernCompilerPath ($generatorName + '.pas')
+        if ($LASTEXITCODE -ne 0) {
+            throw "Modern standard module build failed with exit code $LASTEXITCODE."
+        }
+    }
+    finally {
+        Pop-Location
+    }
+
+    $modernUnits = @(Get-ChildItem -LiteralPath $libraryRoot `
+        -Recurse -File -Filter '*.pcu')
+    if ($modernUnits.Count -eq 0) {
+        throw 'No .NET 10 compiled Pascal units were created.'
+    }
+
+    foreach ($extension in @('.exe', '.exe.config', '.dll', '.pdb',
+        '.deps.json', '.runtimeconfig.json')) {
+        $generatedPath = Join-Path $generatorRoot ($generatorName + $extension)
+        if (Test-Path -LiteralPath $generatedPath) {
+            Remove-Item -LiteralPath $generatedPath -Force
+        }
+    }
+}
+
+function Invoke-HostBuild {
+    param(
+        [string]$ProjectPath,
+        [string]$TargetFramework,
+        [string]$OutputRoot,
+        [string]$AssemblyName
+    )
+
+    Write-Host "Compiling $AssemblyName for $TargetFramework..."
+    & dotnet build $ProjectPath `
+        -c Release `
+        -f $TargetFramework `
+        -m:1 `
+        --nologo `
+        --output $OutputRoot
+
+    if ($LASTEXITCODE -ne 0) {
+        throw "$AssemblyName build failed with exit code $LASTEXITCODE."
+    }
+
+    if ($TargetFramework -eq 'net472') {
+        Assert-FileExists (Join-Path $OutputRoot ($AssemblyName + '.exe'))
+        Assert-FileExists (Join-Path $OutputRoot ($AssemblyName + '.exe.config'))
+    }
+    else {
+        Assert-FileExists (Join-Path $OutputRoot ($AssemblyName + '.dll'))
+        Assert-FileExists (Join-Path $OutputRoot ($AssemblyName + '.deps.json'))
+        Assert-FileExists `
+            (Join-Path $OutputRoot ($AssemblyName + '.runtimeconfig.json'))
     }
 }
 
@@ -282,11 +415,32 @@ function Read-ControllerResponse {
     return $readTask.Result | ConvertFrom-Json
 }
 
-function Test-CompilerRuntime {
-    param([string]$RuntimeRoot)
+function Write-ControllerRequest {
+    param(
+        [System.Diagnostics.Process]$Process,
+        [string]$Request
+    )
 
-    Write-Host 'Running controller smoke test...'
-    $samplePath = Join-Path $buildRoot 'runtime-smoke-test.pas'
+    $requestBytes = [System.Text.Encoding]::UTF8.GetBytes($Request + "`n")
+    $Process.StandardInput.BaseStream.Write(
+        $requestBytes,
+        0,
+        $requestBytes.Length
+    )
+    $Process.StandardInput.BaseStream.Flush()
+}
+
+function Test-CompilerRuntime {
+    param(
+        [string]$RuntimeRoot,
+        [ValidateSet('net-framework', 'net10')]
+        [string]$Target
+    )
+
+    Write-Host "Running $Target controller smoke test..."
+    $sampleDirectory = Join-Path $buildRoot 'папка с пробелами'
+    New-Item -ItemType Directory -Path $sampleDirectory -Force | Out-Null
+    $samplePath = Join-Path $sampleDirectory 'Часы.pas'
     @(
         'begin'
         "  Println('runtime smoke test');"
@@ -294,13 +448,22 @@ function Test-CompilerRuntime {
     ) | Set-Content -LiteralPath $samplePath -Encoding UTF8
 
     $startInfo = New-Object System.Diagnostics.ProcessStartInfo
-    $startInfo.FileName = Join-Path $RuntimeRoot 'PABCCompilerController.exe'
+    if ($Target -eq 'net-framework') {
+        $startInfo.FileName = Join-Path $RuntimeRoot 'PABCCompilerController.exe'
+    }
+    else {
+        $startInfo.FileName = 'dotnet'
+        $controllerPath = Join-Path $RuntimeRoot 'PABCCompilerController.dll'
+        $startInfo.Arguments = '"' + $controllerPath + '"'
+    }
     $startInfo.WorkingDirectory = $RuntimeRoot
     $startInfo.UseShellExecute = $false
     $startInfo.RedirectStandardInput = $true
     $startInfo.RedirectStandardOutput = $true
     $startInfo.RedirectStandardError = $true
     $startInfo.CreateNoWindow = $true
+    $startInfo.StandardOutputEncoding = [System.Text.Encoding]::UTF8
+    $startInfo.StandardErrorEncoding = [System.Text.Encoding]::UTF8
 
     $process = New-Object System.Diagnostics.Process
     $process.StartInfo = $startInfo
@@ -311,8 +474,7 @@ function Test-CompilerRuntime {
         }
 
         $pingRequest = @{ id = 1; command = 'ping' } | ConvertTo-Json -Compress
-        $process.StandardInput.WriteLine($pingRequest)
-        $process.StandardInput.Flush()
+        Write-ControllerRequest $process $pingRequest
         $pingResponse = Read-ControllerResponse $process
 
         if (-not $pingResponse.success -or $pingResponse.result -ne 'PONG') {
@@ -324,18 +486,29 @@ function Test-CompilerRuntime {
             command = 'compile'
             fileName = $samplePath
         } | ConvertTo-Json -Compress
-        $process.StandardInput.WriteLine($compileRequest)
-        $process.StandardInput.Flush()
+        Write-ControllerRequest $process $compileRequest
         $compileResponse = Read-ControllerResponse $process 40
 
         if (-not $compileResponse.success) {
             throw "Controller compile test failed: $($compileResponse | ConvertTo-Json -Compress)"
         }
+        if ($compileResponse.fileName -cne $samplePath) {
+            throw "Controller changed the Unicode source path: $($compileResponse.fileName)"
+        }
+
+        $outputPath = [System.IO.Path]::ChangeExtension($samplePath, '.exe')
+        Assert-FileExists $outputPath
+        if ($Target -eq 'net10') {
+            $programOutput = & dotnet $outputPath
+            if ($LASTEXITCODE -ne 0 -or
+                $programOutput -notcontains 'runtime smoke test') {
+                throw 'The .NET 10 compiled program did not run successfully.'
+            }
+        }
 
         $shutdownRequest = @{ id = 3; command = 'shutdown' } |
             ConvertTo-Json -Compress
-        $process.StandardInput.WriteLine($shutdownRequest)
-        $process.StandardInput.Flush()
+        Write-ControllerRequest $process $shutdownRequest
         $shutdownResponse = Read-ControllerResponse $process
 
         if (-not $shutdownResponse.success) {
@@ -353,37 +526,57 @@ function Test-CompilerRuntime {
         }
 
         $process.Dispose()
-        Remove-Item -LiteralPath $samplePath -Force -ErrorAction SilentlyContinue
-        Remove-Item -LiteralPath ([System.IO.Path]::ChangeExtension($samplePath, '.exe')) `
-            -Force -ErrorAction SilentlyContinue
+        Remove-BuildDirectory $sampleDirectory
     }
 
-    Write-Host 'Controller smoke test passed.'
+    Write-Host "$Target controller smoke test passed."
 }
 
 function Assert-RuntimeLayout {
-    param([string]$RuntimeRoot)
-
-    $requiredRootFiles = @(
-        $compilerDlls
-        $hostDependencies
-        'PABCCompilerController.exe'
-        'ZMQServerPas.exe'
+    param(
+        [string]$RuntimeRoot,
+        [ValidateSet('net-framework', 'net10')]
+        [string]$Target
     )
+
+    if ($Target -eq 'net-framework') {
+        $requiredRootFiles = @($legacyCompilerDlls) + @($hostDependencies) + @(
+            'PABCCompilerController.exe'
+            'PABCCompilerController.exe.config'
+            'ZMQServerPas.exe'
+            'ZMQServerPas.exe.config'
+        )
+        $allowedRootExtensions = @('.dll', '.exe', '.config')
+        $expectedExecutables = @(
+            'PABCCompilerController.exe',
+            'ZMQServerPas.exe'
+        )
+    }
+    else {
+        $requiredRootFiles = @($modernCompilerDlls) + @(
+            'PABCCompilerController.dll'
+            'PABCCompilerController.deps.json'
+            'PABCCompilerController.runtimeconfig.json'
+            'ZMQServerPas.dll'
+            'ZMQServerPas.deps.json'
+            'ZMQServerPas.runtimeconfig.json'
+        )
+        $allowedRootExtensions = @('.dll', '.json')
+        $expectedExecutables = @()
+    }
 
     foreach ($fileName in $requiredRootFiles) {
         Assert-FileExists (Join-Path $RuntimeRoot $fileName)
     }
 
     $unexpectedRootFiles = @(Get-ChildItem -LiteralPath $RuntimeRoot -File |
-        Where-Object { $_.Extension -notin @('.dll', '.exe') })
+        Where-Object { $_.Extension -notin $allowedRootExtensions })
     if ($unexpectedRootFiles.Count -ne 0) {
         throw "Unexpected files in bin root: $($unexpectedRootFiles.Name -join ', ')"
     }
 
     $rootExecutables = @(Get-ChildItem -LiteralPath $RuntimeRoot -File -Filter '*.exe' |
         Select-Object -ExpandProperty Name | Sort-Object)
-    $expectedExecutables = @('PABCCompilerController.exe', 'ZMQServerPas.exe')
     if (($rootExecutables -join '|') -ne ($expectedExecutables -join '|')) {
         throw "Unexpected executable set: $($rootExecutables -join ', ')"
     }
@@ -426,13 +619,13 @@ function Assert-RuntimeLayout {
 Write-Host "PascalABC.NET source: $PascalABCSourcePath"
 Assert-DirectoryExists $PascalABCSourcePath
 Assert-FileExists (Join-Path $PascalABCSourcePath 'PascalABCNET.sln')
+Assert-FileExists $controllerProjectPath
+Assert-FileExists (Join-Path $compilerHostRoot 'Controller\Program.cs')
+Assert-FileExists $workerProjectPath
+Assert-FileExists (Join-Path $compilerHostRoot 'Worker\Program.cs')
 Assert-DirectoryExists (Join-Path $pascalABCRuntimeRoot 'Lib')
 Assert-DirectoryExists (Join-Path $pascalABCRuntimeRoot 'Lng\Eng')
 Assert-DirectoryExists (Join-Path $pascalABCRuntimeRoot 'Lng\Rus')
-
-foreach ($sourceName in $hostSources) {
-    Assert-FileExists (Join-Path $compilerHostRoot $sourceName)
-}
 foreach ($dependencyName in $hostDependencies) {
     Assert-FileExists (Join-Path $dependencyRoot $dependencyName)
 }
@@ -440,10 +633,14 @@ foreach ($dependencyName in $hostDependencies) {
 Assert-OutputRuntimeNotInUse
 Invoke-PascalABCBuild
 Invoke-StandardModulesBuild
+Invoke-ModernPascalABCBuild
 
 Assert-FileExists $compilerPath
-foreach ($dllName in $compilerDlls) {
+foreach ($dllName in $legacyCompilerDlls) {
     Assert-FileExists (Join-Path $pascalABCRuntimeRoot $dllName)
+}
+foreach ($dllName in $modernCompilerDlls) {
+    Assert-FileExists (Join-Path $modernPascalABCRuntimeRoot $dllName)
 }
 
 New-Item -ItemType Directory -Path $buildRoot -Force | Out-Null
@@ -453,45 +650,68 @@ Remove-BuildDirectory $backupBinRoot
 New-Item -ItemType Directory -Path $hostBuildRoot | Out-Null
 New-Item -ItemType Directory -Path $nextBinRoot | Out-Null
 
-foreach ($dllName in $compilerDlls) {
-    Copy-RequiredFile (Join-Path $pascalABCRuntimeRoot $dllName) $nextBinRoot
+$legacyRuntimeRoot = Join-Path $nextBinRoot 'net-framework'
+$modernRuntimeRoot = Join-Path $nextBinRoot 'net10'
+New-Item -ItemType Directory -Path $legacyRuntimeRoot | Out-Null
+New-Item -ItemType Directory -Path $modernRuntimeRoot | Out-Null
+
+$legacyControllerBuildRoot = Join-Path $hostBuildRoot 'Controller-net472'
+$legacyWorkerBuildRoot = Join-Path $hostBuildRoot 'Worker-net472'
+$modernControllerBuildRoot = Join-Path $hostBuildRoot 'Controller-net10'
+$modernWorkerBuildRoot = Join-Path $hostBuildRoot 'Worker-net10'
+
+Invoke-HostBuild $controllerProjectPath 'net472' `
+    $legacyControllerBuildRoot 'PABCCompilerController'
+Invoke-HostBuild $workerProjectPath 'net472' `
+    $legacyWorkerBuildRoot 'ZMQServerPas'
+Invoke-HostBuild $controllerProjectPath 'net10.0' `
+    $modernControllerBuildRoot 'PABCCompilerController'
+Invoke-HostBuild $workerProjectPath 'net10.0' `
+    $modernWorkerBuildRoot 'ZMQServerPas'
+
+foreach ($dllName in $legacyCompilerDlls) {
+    Copy-RequiredFile (Join-Path $pascalABCRuntimeRoot $dllName) `
+        $legacyRuntimeRoot
 }
 foreach ($dependencyName in $hostDependencies) {
-    Copy-RequiredFile (Join-Path $dependencyRoot $dependencyName) $nextBinRoot
+    Copy-RequiredFile (Join-Path $dependencyRoot $dependencyName) `
+        $legacyRuntimeRoot
 }
 
-$nextLibRoot = Join-Path $nextBinRoot 'Lib'
-Copy-PascalLibraryArtifacts (Join-Path $pascalABCRuntimeRoot 'Lib') $nextLibRoot
-Copy-RequiredFile (Join-Path $pascalABCRuntimeRoot 'Lib\turtle.png') $nextLibRoot
-
-$nextLanguageRoot = Join-Path $nextBinRoot 'Lng'
-New-Item -ItemType Directory -Path $nextLanguageRoot | Out-Null
-Copy-Item -LiteralPath (Join-Path $pascalABCRuntimeRoot 'Lng\Eng') `
-    -Destination $nextLanguageRoot -Recurse
-Copy-Item -LiteralPath (Join-Path $pascalABCRuntimeRoot 'Lng\Rus') `
-    -Destination $nextLanguageRoot -Recurse
-
-foreach ($sourceName in $hostSources) {
-    Copy-RequiredFile (Join-Path $compilerHostRoot $sourceName) $hostBuildRoot
-}
-Get-ChildItem -LiteralPath $nextBinRoot -File -Filter '*.dll' |
-    Copy-Item -Destination $hostBuildRoot
-
-Push-Location $hostBuildRoot
-try {
-    foreach ($sourceName in $hostSources) {
-        Invoke-PascalCompilation $sourceName
-    }
-}
-finally {
-    Pop-Location
+foreach ($dllFile in Get-ChildItem -LiteralPath $modernPascalABCRuntimeRoot `
+    -File -Filter '*.dll') {
+    Copy-Item -LiteralPath $dllFile.FullName -Destination $modernRuntimeRoot
 }
 
-Copy-RequiredFile (Join-Path $hostBuildRoot 'PABCCompilerController.exe') $nextBinRoot
-Copy-RequiredFile (Join-Path $hostBuildRoot 'ZMQServerPas.exe') $nextBinRoot
+Copy-HostOutput $legacyControllerBuildRoot $legacyRuntimeRoot `
+    @('.exe', '.exe.config')
+Copy-HostOutput $legacyWorkerBuildRoot $legacyRuntimeRoot `
+    @('.exe', '.exe.config')
+Copy-HostOutput $modernControllerBuildRoot $modernRuntimeRoot `
+    @('.dll', '.deps.json', '.runtimeconfig.json')
+Copy-HostOutput $modernWorkerBuildRoot $modernRuntimeRoot `
+    @('.dll', '.deps.json', '.runtimeconfig.json')
 
-Assert-RuntimeLayout $nextBinRoot
-Test-CompilerRuntime $nextBinRoot
+$legacyLibRoot = Join-Path $legacyRuntimeRoot 'Lib'
+Copy-PascalLibraryArtifacts (Join-Path $pascalABCRuntimeRoot 'Lib') `
+    $legacyLibRoot
+Copy-RequiredFile (Join-Path $pascalABCRuntimeRoot 'Lib\turtle.png') `
+    $legacyLibRoot
+Copy-LanguageResources (Join-Path $pascalABCRuntimeRoot 'Lng') `
+    (Join-Path $legacyRuntimeRoot 'Lng')
+
+$modernLibRoot = Join-Path $modernRuntimeRoot 'Lib'
+Copy-PascalLibraryArtifacts (Join-Path $modernPascalABCRuntimeRoot 'Lib') `
+    $modernLibRoot
+Copy-RequiredFile (Join-Path $modernPascalABCRuntimeRoot 'Lib\turtle.png') `
+    $modernLibRoot
+Copy-LanguageResources (Join-Path $modernPascalABCRuntimeRoot 'Lng') `
+    (Join-Path $modernRuntimeRoot 'Lng')
+
+Assert-RuntimeLayout $legacyRuntimeRoot 'net-framework'
+Assert-RuntimeLayout $modernRuntimeRoot 'net10'
+Test-CompilerRuntime $legacyRuntimeRoot 'net-framework'
+Test-CompilerRuntime $modernRuntimeRoot 'net10'
 Assert-OutputRuntimeNotInUse
 
 if (Test-Path -LiteralPath $outputBinRoot) {

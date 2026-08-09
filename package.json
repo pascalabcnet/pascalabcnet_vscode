@@ -2,7 +2,7 @@
   "name": "pascalabc-net",
   "displayName": "PascalABC.NET",
   "description": "Official PascalABC.NET language support, compilation, and execution for Visual Studio Code",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "pascalabcnet",
   "preview": true,
   "icon": "images/pascalabc-net.png",
@@ -47,6 +47,13 @@
             "scope": "storage.modifier.variable.pascalabc",
             "settings": {
               "foreground": "#D19A66",
+              "fontStyle": "bold"
+            }
+          },
+          {
+            "scope": "log.error.pascalabc-output",
+            "settings": {
+              "foreground": "#F14C4C",
               "fontStyle": "bold"
             }
           },
@@ -115,6 +122,10 @@
           ".pas"
         ],
         "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "pascalabc-output",
+        "aliases": []
       }
     ],
     "grammars": [
@@ -122,6 +133,11 @@
         "language": "pascalabc",
         "scopeName": "source.pascalabc",
         "path": "./syntaxes/pascalabc.tmLanguage.json"
+      },
+      {
+        "language": "pascalabc-output",
+        "scopeName": "source.pascalabc-output",
+        "path": "./syntaxes/pascalabc-output.tmLanguage.json"
       }
     ],
     "snippets": [
@@ -154,6 +170,10 @@
       {
         "command": "pascalabc.restartCompiler",
         "title": "PascalABC.NET: Restart Compiler"
+      },
+      {
+        "command": "pascalabc.selectCompilerTarget",
+        "title": "PascalABC.NET: Select Compiler Target"
       },
       {
         "command": "pascalabc.newFile",
@@ -230,7 +250,20 @@
         "pascalabc.controllerPath": {
           "type": "string",
           "default": "",
-          "description": "Path to PABCCompilerController.exe. An empty value uses the bundled controller."
+          "description": "Path to a custom .NET Framework PABCCompilerController.exe. An empty value uses the bundled controller."
+        },
+        "pascalabc.compilerTarget": {
+          "type": "string",
+          "enum": [
+            "net-framework",
+            "net10"
+          ],
+          "enumDescriptions": [
+            ".NET Framework 4.7.2 (classic PascalABC.NET runtime)",
+            ".NET 10 (modern runtime; compiled programs run through dotnet)"
+          ],
+          "default": "net-framework",
+          "description": "Compiler runtime used for compilation and execution."
         }
       }
     }

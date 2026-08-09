@@ -1,0 +1,78 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFrameworks>net472;net10.0</TargetFrameworks>
+    <AssemblyName>ZMQServerPas</AssemblyName>
+    <RootNamespace>PascalABCNet.CompilerWorker</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <LegacyCompilerRoot>$(MSBuildThisFileDirectory)..\..\external\pascalabcnet\bin</LegacyCompilerRoot>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <UseAppHost>false</UseAppHost>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net472'">
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net472"
+                      Version="1.0.3"
+                      PrivateAssets="all" />
+    <Reference Include="AsyncIO">
+      <HintPath>..\dependencies\netmq\AsyncIO.dll</HintPath>
+    </Reference>
+    <Reference Include="NaCl">
+      <HintPath>..\dependencies\netmq\NaCl.dll</HintPath>
+    </Reference>
+    <Reference Include="NetMQ">
+      <HintPath>..\dependencies\netmq\NetMQ.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Buffers">
+      <HintPath>..\dependencies\netmq\System.Buffers.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Memory">
+      <HintPath>..\dependencies\netmq\System.Memory.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Numerics.Vectors">
+      <HintPath>..\dependencies\netmq\System.Numerics.Vectors.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Runtime.CompilerServices.Unsafe">
+      <HintPath>..\dependencies\netmq\System.Runtime.CompilerServices.Unsafe.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Threading.Tasks.Extensions">
+      <HintPath>..\dependencies\netmq\System.Threading.Tasks.Extensions.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <PackageReference Include="NetMQ" Version="4.0.4.3" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net472'">
+    <Reference Include="Compiler">
+      <HintPath>$(LegacyCompilerRoot)\Compiler.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Errors">
+      <HintPath>$(LegacyCompilerRoot)\Errors.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="LanguageIntegrator">
+      <HintPath>$(LegacyCompilerRoot)\LanguageIntegrator.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Localization">
+      <HintPath>$(LegacyCompilerRoot)\Localization.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="SemanticTree">
+      <HintPath>$(LegacyCompilerRoot)\SemanticTree.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <ProjectReference Include="..\..\external\pascalabcnet\Compiler\Compiler.csproj" />
+  </ItemGroup>
+</Project>
