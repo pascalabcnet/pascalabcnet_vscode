@@ -7,8 +7,15 @@ import {
 import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline';
+import {
+    LanguageClient,
+    LanguageClientOptions,
+    ServerOptions,
+    TransportKind
+} from 'vscode-languageclient/node';
 
 let controller: CompilerController | undefined;
+let languageClient: LanguageClient | undefined;
 let runTerminal: vscode.Terminal | undefined;
 let activeRunExecution: vscode.TerminalShellExecution | undefined;
 let compilationInProgress = false;
@@ -318,6 +325,85 @@ interface PingResponse extends CompileResponse {
     result?: string;
 }
 
+interface SnippetDefinition {
+    prefix: string | string[];
+    body: string | string[];
+    description?: string;
+}
+
+class PascalABCSnippetProvider implements vscode.CompletionItemProvider {
+    public constructor(
+        private readonly snippets: ReadonlyArray<[
+            string,
+            SnippetDefinition
+        ]>
+    ) {
+    }
+
+    public provideCompletionItems(
+        document: vscode.TextDocument,
+        position: vscode.Position
+    ): vscode.CompletionList {
+        const linePrefix = document.lineAt(position).text.slice(
+            0,
+            position.character
+        );
+        if (/\.\s*[\p{L}\w]*$/u.test(linePrefix)) {
+            return new vscode.CompletionList([], true);
+        }
+
+        const wordMatch = linePrefix.match(/[\p{L}\w]+$/u);
+        const typedPrefix = wordMatch?.[0].toLocaleLowerCase() ?? '';
+
+        const items = this.snippets.flatMap(([name, definition], index) => {
+            const prefixes = Array.isArray(definition.prefix)
+                ? definition.prefix
+                : [definition.prefix];
+            const matchingPrefix = prefixes.find(prefix =>
+                prefix.toLocaleLowerCase().startsWith(typedPrefix)
+            );
+            if (!matchingPrefix) {
+                return [];
+            }
+
+            const item = new vscode.CompletionItem(
+                matchingPrefix,
+                vscode.CompletionItemKind.Snippet
+            );
+            const body = Array.isArray(definition.body)
+                ? definition.body.join('\n')
+                : definition.body;
+            item.insertText = new vscode.SnippetString(body);
+            item.detail = name;
+            item.documentation = definition.description;
+            item.filterText = matchingPrefix;
+            item.sortText = index.toString().padStart(3, '0');
+
+            return [item];
+        });
+
+        return new vscode.CompletionList(items, true);
+    }
+}
+
+function registerSnippetProvider(
+    context: vscode.ExtensionContext
+): vscode.Disposable {
+    const snippetsPath = context.asAbsolutePath(path.join(
+        'snippets',
+        'pascalabc.json'
+    ));
+    const snippets = JSON.parse(
+        fs.readFileSync(snippetsPath, 'utf8')
+    ) as Record<string, SnippetDefinition>;
+
+    return vscode.languages.registerCompletionItemProvider(
+        { language: 'pascalabc' },
+        new PascalABCSnippetProvider(Object.entries(snippets)),
+        '.'
+    );
+}
+
 export function activate(context: vscode.ExtensionContext): void {
     const output = vscode.window.createOutputChannel(
         'PascalABC.NET',
@@ -332,17 +418,15 @@ export function activate(context: vscode.ExtensionContext): void {
     compilerStatus.command = 'pascalabc.selectCompilerTarget';
     compilerStatus.name = 'PascalABC.NET Compiler';
     updateCompilerStatus(compilerStatus);
-    const completionProvider =
-        vscode.languages.registerCompletionItemProvider(
-            { language: 'pascalabc' },
-            new PascalABCCompletionProvider()
-        );
+    const snippetProvider = registerSnippetProvider(context);
     context.subscriptions.push(
         output,
         diagnostics,
         compilerStatus,
-        completionProvider
+        snippetProvider
     );
+
+    startLanguageServer(context);
 
     context.subscriptions.push(
         vscode.window.onDidCloseTerminal(terminal => {
@@ -602,146 +686,6 @@ async function saveDocument(
     }
 
     return await document.save() ? document : undefined;
-}
-
-interface CompletionDefinition {
-    label: string;
-    insertText: string;
-    detail: string;
-    documentation: string;
-    kind: vscode.CompletionItemKind;
-}
-
-const globalCompletions: CompletionDefinition[] = [
-    {
-        label: 'Println',
-        insertText: 'Println(${1:value})',
-        detail: 'procedure Println(params values: array of object)',
-        documentation: 'Выводит значения и переводит строку.',
-        kind: vscode.CompletionItemKind.Function
-    },
-    {
-        label: 'ReadInteger',
-        insertText: 'ReadInteger()',
-        detail: 'function ReadInteger: integer',
-        documentation: 'Считывает целое число из консоли.',
-        kind: vscode.CompletionItemKind.Function
-    },
-    {
-        label: 'ReadReal',
-        insertText: 'ReadReal()',
-        detail: 'function ReadReal: real',
-        documentation: 'Считывает вещественное число из консоли.',
-        kind: vscode.CompletionItemKind.Function
-    },
-    {
-        label: 'Range',
-        insertText: 'Range(${1:fromValue}, ${2:toValue})',
-        detail: 'function Range(fromValue, toValue: integer): sequence of integer',
-        documentation: 'Создаёт последовательность целых чисел.',
-        kind: vscode.CompletionItemKind.Function
-    },
-    {
-        label: 'Arr',
-        insertText: 'Arr(${1:items})',
-        detail: 'function Arr<T>(params items: array of T): array of T',
-        documentation: 'Создаёт массив из перечисленных элементов.',
-        kind: vscode.CompletionItemKind.Function
-    },
-    {
-        label: 'SetOf',
-        insertText: 'SetOf(${1:items})',
-        detail: 'function SetOf<T>(params items: array of T): NewSet<T>',
-        documentation: 'Создаёт множество из перечисленных элементов.',
-        kind: vscode.CompletionItemKind.Function
-    },
-    {
-        label: 'Lst',
-        insertText: 'Lst(${1:items})',
-        detail: 'function Lst<T>(params items: array of T): List<T>',
-        documentation: 'Создаёт список из элементов или последовательности.',
-        kind: vscode.CompletionItemKind.Function
-    },
-    {
-        label: 'HSet',
-        insertText: 'HSet(${1:items})',
-        detail: 'function HSet<T>(params items: array of T): HashSet<T>',
-        documentation: 'Создаёт множество уникальных элементов.',
-        kind: vscode.CompletionItemKind.Function
-    },
-    {
-        label: 'Dict',
-        insertText: 'Dict(${1:pairs})',
-        detail: 'function Dict<TKey, TValue>(params pairs): Dictionary<TKey, TValue>',
-        documentation: 'Создаёт словарь из пар ключ-значение.',
-        kind: vscode.CompletionItemKind.Function
-    },
-    {
-        label: 'List',
-        insertText: 'List<${1:integer}>',
-        detail: 'System.Collections.Generic.List<T>',
-        documentation: 'Изменяемый список элементов.',
-        kind: vscode.CompletionItemKind.Class
-    },
-    {
-        label: 'HashSet',
-        insertText: 'HashSet<${1:integer}>',
-        detail: 'System.Collections.Generic.HashSet<T>',
-        documentation: 'Множество уникальных элементов.',
-        kind: vscode.CompletionItemKind.Class
-    },
-    {
-        label: 'Stack',
-        insertText: 'Stack<${1:integer}>',
-        detail: 'System.Collections.Generic.Stack<T>',
-        documentation: 'Коллекция LIFO.',
-        kind: vscode.CompletionItemKind.Class
-    },
-    {
-        label: 'Queue',
-        insertText: 'Queue<${1:integer}>',
-        detail: 'System.Collections.Generic.Queue<T>',
-        documentation: 'Коллекция FIFO.',
-        kind: vscode.CompletionItemKind.Class
-    }
-];
-
-class PascalABCCompletionProvider implements vscode.CompletionItemProvider {
-    public provideCompletionItems(
-        document: vscode.TextDocument,
-        position: vscode.Position
-    ): vscode.CompletionItem[] {
-        const linePrefix = document.lineAt(position).text.slice(
-            0,
-            position.character
-        );
-        if (/\.\s*[\p{L}\w]*$/u.test(linePrefix)) {
-            return [];
-        }
-
-        const wordMatch = linePrefix.match(/[\p{L}\w]+$/u);
-        const prefix = wordMatch?.[0].toLocaleLowerCase() ?? '';
-        const matchingCompletions = globalCompletions.filter(definition =>
-            definition.label.toLocaleLowerCase().startsWith(prefix)
-        );
-
-        return matchingCompletions.map((definition, index) => {
-            const item = new vscode.CompletionItem(
-                definition.label,
-                definition.kind
-            );
-
-            item.insertText = new vscode.SnippetString(definition.insertText);
-            item.detail = definition.detail;
-            item.documentation = new vscode.MarkdownString(
-                definition.documentation
-            );
-            item.filterText = definition.label;
-            item.sortText = index.toString().padStart(3, '0');
-
-            return item;
-        });
-    }
 }
 
 async function compileActiveDocument(
@@ -1327,7 +1271,128 @@ function toSeverity(value: string): vscode.DiagnosticSeverity {
     }
 }
 
-export function deactivate(): void {
+function sortMemberCompletions(
+    result: vscode.CompletionItem[] | vscode.CompletionList | undefined | null
+): vscode.CompletionItem[] | vscode.CompletionList | undefined | null {
+    const items = Array.isArray(result) ? result : result?.items;
+    if (!items) {
+        return result;
+    }
+
+    const isProperty = (item: vscode.CompletionItem): boolean =>
+        item.kind === vscode.CompletionItemKind.Property ||
+        item.kind === vscode.CompletionItemKind.Field;
+    const isMethod = (item: vscode.CompletionItem): boolean =>
+        item.kind === vscode.CompletionItemKind.Method ||
+        item.kind === vscode.CompletionItemKind.Constructor;
+
+    if (!items.some(isProperty) || !items.some(isMethod)) {
+        return result;
+    }
+
+    for (const item of items) {
+        const group = isProperty(item) ? '0' : isMethod(item) ? '1' : '2';
+        const label = typeof item.label === 'string'
+            ? item.label
+            : item.label.label;
+        item.sortText = `${group}_${item.sortText ?? label}`;
+    }
+
+    return result;
+}
+
+function startLanguageServer(context: vscode.ExtensionContext): void {
+    const output = vscode.window.createOutputChannel(
+        'PascalABC.NET Language Server',
+        { log: true }
+    );
+    context.subscriptions.push(output);
+
+    if (process.platform !== 'win32') {
+        output.warn(
+            'PascalABC.NET IntelliSense is currently bundled only for Windows.'
+        );
+        return;
+    }
+
+    const serverPath = context.asAbsolutePath(path.join(
+        'server',
+        'win-x64',
+        'PascalABCNet.LanguageServer.exe'
+    ));
+
+    if (!fs.existsSync(serverPath)) {
+        const message =
+            'PascalABC.NET IntelliSense server was not found. ' +
+            'Compilation and Run remain available.';
+        output.error(`${message} Expected path: ${serverPath}`);
+        void vscode.window.showWarningMessage(message);
+        return;
+    }
+
+    const serverOptions: ServerOptions = {
+        command: serverPath,
+        args: [
+            '--stdio',
+            '--documentation-language',
+            'en'
+        ],
+        transport: TransportKind.stdio,
+        options: {
+            cwd: path.dirname(serverPath),
+            detached: false
+        }
+    };
+    const clientOptions: LanguageClientOptions = {
+        documentSelector: [{ language: 'pascalabc' }],
+        outputChannel: output,
+        diagnosticCollectionName: 'pascalabc-language-server',
+        middleware: {
+            provideCompletionItem: async (
+                document,
+                position,
+                completionContext,
+                token,
+                next
+            ) => sortMemberCompletions(await next(
+                document,
+                position,
+                completionContext,
+                token
+            ))
+        }
+    };
+    const client = new LanguageClient(
+        'pascalabcLanguageServer',
+        'PascalABC.NET Language Server',
+        serverOptions,
+        clientOptions
+    );
+
+    languageClient = client;
+    void client.start().catch((error: unknown) => {
+        if (languageClient === client) {
+            languageClient = undefined;
+        }
+
+        const details = error instanceof Error
+            ? error.message
+            : String(error);
+        output.error(`Language server failed to start: ${details}`);
+        void vscode.window.showWarningMessage(
+            'PascalABC.NET IntelliSense could not be started. ' +
+            'Compilation and Run remain available.'
+        );
+    });
+}
+
+export async function deactivate(): Promise<void> {
     controller?.dispose();
     controller = undefined;
+
+    const client = languageClient;
+    languageClient = undefined;
+    if (client?.needsStop()) {
+        await client.stop();
+    }
 }

@@ -5,10 +5,12 @@ obj/
 # Generated output and bundled compiler runtime
 out/
 bin/
+server/
 .build/
 
 # Packaged extensions
 *.vsix
+*.vsix-last_published
 
 # Logs and temporary files
 *.log

@@ -5,11 +5,13 @@
 src/**
 compiler-host/**
 external/**
+externals/**
 scripts/**
-node_modules/**
+.build/**
 tsconfig.json
 package-lock.json
 out/**/*.map
 bin/*.pas
 bin/*.pdb
 *.vsix
+*.vsix-last_published

@@ -9,10 +9,32 @@ $ErrorActionPreference = 'Stop'
 $repositoryRoot = [System.IO.Path]::GetFullPath(
     (Join-Path $PSScriptRoot '..')
 )
-if ([string]::IsNullOrWhiteSpace($PascalABCSourcePath)) {
-    $PascalABCSourcePath = Join-Path $repositoryRoot 'external\pascalabcnet'
+$usesPinnedPascalABCSources = [string]::IsNullOrWhiteSpace(
+    $PascalABCSourcePath
+)
+if ($usesPinnedPascalABCSources) {
+    $PascalABCSourcePath = Join-Path $repositoryRoot `
+        'externals\pascalabcnet-tooling\pascalabcnet'
 }
 $PascalABCSourcePath = [System.IO.Path]::GetFullPath($PascalABCSourcePath)
+
+if ($usesPinnedPascalABCSources -and
+    -not (Test-Path -LiteralPath `
+        (Join-Path $PascalABCSourcePath 'PascalABCNET.sln') `
+        -PathType Leaf)) {
+    Write-Host '=== Initializing compiler submodules ==='
+    Push-Location $repositoryRoot
+    try {
+        & git submodule update --init --recursive
+        if ($LASTEXITCODE -ne 0) {
+            throw "Git submodule initialization failed with exit code $LASTEXITCODE."
+        }
+    }
+    finally {
+        Pop-Location
+    }
+}
+
 $pascalABCRuntimeRoot = Join-Path $PascalABCSourcePath 'bin'
 $modernPascalABCRuntimeRoot = Join-Path $PascalABCSourcePath 'bin-net10'
 $compilerHostRoot = Join-Path $repositoryRoot 'compiler-host'

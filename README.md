@@ -14,7 +14,8 @@ PascalABC.NET is also a practical tool for console applications, educational and
 
 - PascalABC.NET syntax highlighting and language configuration
 - snippets for common language constructs
-- completion for commonly used standard functions and collection types
+- semantic completion, including member completion after `.`
+- hover information and signature help for calls and overloads
 - compilation diagnostics in the editor
 - compile current file with `Ctrl+F9`
 - compile and run with `F9`
@@ -50,6 +51,12 @@ The classic .NET Framework runtime is selected by default. The .NET 10 target re
 
 Some optional modules depend on components normally installed with the full PascalABC.NET distribution. For example, `Graph3D` expects HelixToolkit and `NUnitABC` expects NUnit.
 
+## IntelliSense
+
+Semantic language features are provided by the separate [PascalABC.NET Tooling](https://github.com/pascalabcnet/pascalabcnet-tooling) backend. The extension starts its self-contained .NET 10 language server as an independent process and communicates with it through the standard Language Server Protocol over stdio.
+
+The language server owns document synchronization and PascalABC.NET semantic analysis, including global and member completion. The existing compiler controller remains an independent process and continues to handle explicit Compile and Run commands.
+
 ## Development
 
 Clone the repository together with its submodule:
@@ -64,12 +71,20 @@ For an existing clone, initialize or update the pinned submodule with:
 git submodule update --init --recursive
 ```
 
-Install the Node.js dependencies and compile the TypeScript extension:
+Install the pinned Node.js dependencies and compile the TypeScript extension:
 
 ```powershell
-npm install
+npm ci
 npm run compile
 ```
+
+Publish the self-contained Windows language server and compile the extension client with:
+
+```powershell
+npm run build
+```
+
+The generated language server is placed in `server/win-x64/`. Both `server/` and the compiler runtime in `bin/` are generated locally and are not stored in Git.
 
 Open the repository in Visual Studio Code and press `F5` to launch an Extension Development Host window.
 
@@ -87,30 +102,59 @@ scripts\build-runtime.cmd
 
 The script builds the compiler solution, rebuilds the standard PCU modules, builds the controller and worker, then stages and validates the new runtime before atomically replacing the generated `bin/` directory. A different PascalABC.NET source checkout can be selected with `-PascalABCSourcePath`.
 
+To publish only the language server, run:
+
+```powershell
+.\scripts\build-server.ps1
+```
+
+From Command Prompt, use `scripts\build-server.cmd`.
+
 To prepare the runtime, restore Node.js dependencies, compile TypeScript, and package the complete VSIX in one step from Command Prompt, run:
 
 ```bat
 scripts\build-vsix.cmd
 ```
 
-The resulting file is named from the extension version in `package.json`, for example `pascalabc-net-0.2.0.vsix`.
+The resulting file is named from the extension version in `package.json`, for example `pascalabc-net-0.3.0.vsix`.
 
 ## Building a VSIX
 
-Before packaging, make sure that `bin/` contains the complete compiler runtime required by the extension. Then run:
+The recommended command builds the compiler runtime and language server, restores Node.js dependencies, compiles TypeScript, and packages the VSIX:
 
 ```powershell
-npm install
+.\scripts\build-vsix.ps1
+```
+
+From Command Prompt, use `scripts\build-vsix.cmd`.
+
+If all generated components have already been prepared, the equivalent final packaging steps are:
+
+```powershell
+npm ci
 npm run compile
 npx --yes @vscode/vsce package
 ```
 
-The generated `.vsix` file is ignored by Git.
+Before invoking `vsce` directly, both `bin/` and `server/win-x64/` must contain their complete generated runtimes. The generated `.vsix` file is ignored by Git.
+
+## Updating the Tooling Backend
+
+The VS Code repository pins only `externals/pascalabcnet-tooling`. The tooling repository in turn pins the compatible PascalABC.NET compiler sources.
+
+The update order is:
+
+1. update and verify the PascalABC.NET submodule pointer in the tooling repository;
+2. commit and test the tooling repository;
+3. update the tooling submodule pointer in this repository;
+4. initialize the pinned nested submodule with `git submodule update --init --recursive` and run the full extension build.
+
+Do not update `externals/pascalabcnet-tooling/pascalabcnet` directly from this repository, and do not use `git submodule update --remote` in the reproducible build flow.
 
 To install it locally:
 
 ```powershell
-code --install-extension .\pascalabc-net-0.2.0.vsix
+code --install-extension .\pascalabc-net-0.3.0.vsix
 ```
 
 ## Commands

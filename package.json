@@ -2,7 +2,7 @@
   "name": "pascalabc-net",
   "displayName": "PascalABC.NET",
   "description": "Official PascalABC.NET language support, compilation, and execution for Visual Studio Code",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "pascalabcnet",
   "preview": true,
   "icon": "images/pascalabc-net.png",
@@ -41,8 +41,8 @@
             "settings": {
               "foreground": "#D7BA7D",
               "fontStyle": "bold"
-              }
-            },
+            }
+          },
           {
             "scope": "storage.modifier.variable.pascalabc",
             "settings": {
@@ -64,14 +64,14 @@
               "fontStyle": "bold"
             }
           },
-            {
-              "scope": [
-                "keyword.operator.word.pascalabc",
-                "keyword.control.pascalabc",
-                "keyword.declaration.pascalabc",
-                "keyword.other.pascalabc",
-                "storage.modifier.pascalabc",
-                "storage.type.function.pascalabc"
+          {
+            "scope": [
+              "keyword.operator.word.pascalabc",
+              "keyword.control.pascalabc",
+              "keyword.declaration.pascalabc",
+              "keyword.other.pascalabc",
+              "storage.modifier.pascalabc",
+              "storage.type.function.pascalabc"
             ],
             "settings": {
               "foreground": "#4FC1FF",
@@ -84,30 +84,30 @@
               "fontStyle": "bold"
             }
           },
-            {
-              "scope": "storage.type.pascalabc",
-              "settings": {
-                "foreground": "#20E0B2"
-              }
-            },
-            {
-              "scope": "entity.name.function.pascalabc",
-              "settings": {
-                "foreground": "#DCDCAA"
-              }
-            },
-            {
-              "scope": [
-                "constant.language.pascalabc",
-                "constant.numeric.hex.pascalabc",
-                "constant.numeric.binary.pascalabc",
-                "constant.numeric.float.pascalabc",
-                "constant.numeric.integer.pascalabc"
-              ],
-              "settings": {
-                "foreground": "#98C379"
-              }
+          {
+            "scope": "storage.type.pascalabc",
+            "settings": {
+              "foreground": "#20E0B2"
             }
+          },
+          {
+            "scope": "entity.name.function.pascalabc",
+            "settings": {
+              "foreground": "#DCDCAA"
+            }
+          },
+          {
+            "scope": [
+              "constant.language.pascalabc",
+              "constant.numeric.hex.pascalabc",
+              "constant.numeric.binary.pascalabc",
+              "constant.numeric.float.pascalabc",
+              "constant.numeric.integer.pascalabc"
+            ],
+            "settings": {
+              "foreground": "#98C379"
+            }
+          }
         ]
       }
     },
@@ -138,12 +138,6 @@
         "language": "pascalabc-output",
         "scopeName": "source.pascalabc-output",
         "path": "./syntaxes/pascalabc-output.tmLanguage.json"
-      }
-    ],
-    "snippets": [
-      {
-        "language": "pascalabc",
-        "path": "./snippets/pascalabc.json"
       }
     ],
     "commands": [
@@ -270,7 +264,13 @@
   },
   "scripts": {
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "build:server": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-server.ps1",
+    "build": "npm run build:server && npm run compile",
+    "package": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-vsix.ps1"
+  },
+  "dependencies": {
+    "vscode-languageclient": "9.0.1"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

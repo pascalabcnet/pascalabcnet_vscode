@@ -2,6 +2,32 @@
 
 All notable changes to the PascalABC.NET extension are documented in this file.
 
+## 0.3.0 — Semantic IntelliSense
+
+### Added
+
+- Semantic completion after `.`, hover information, and signature help through the PascalABC.NET language server.
+- A self-contained Windows x64 language server bundled with the extension.
+- Reproducible scripts for publishing the pinned tooling backend and packaging it in the VSIX.
+
+### Changed
+
+- PascalABC.NET tooling is now pinned as a Git submodule and owns the nested PascalABC.NET compiler source submodule.
+- The extension communicates with IntelliSense through the standard Language Server Protocol over stdio.
+- Member completion lists show properties and fields before methods.
+- Language snippets are context-aware and are not offered after member-access dots.
+
+### Removed
+
+- The temporary hard-coded TypeScript completion list; all IntelliSense completion now comes from the semantic language server.
+
+### Fixed
+
+- Language server initialization with current VS Code releases by using an LSP client protocol version compatible with the pinned tooling backend.
+- Signature help for global standard routines such as `Print` by bundling the compatible PascalABC.NET standard library with the language server.
+- Static .NET 10 type completion such as `DateTime.`; completion no longer fails with LSP error `-32000`.
+- Completion for modern .NET 10 array extension methods such as `AsSpan`.
+
 ## 0.2.0 — Dual Compiler Targets
 
 ### Added

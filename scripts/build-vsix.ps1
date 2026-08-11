@@ -10,6 +10,7 @@ $repositoryRoot = [System.IO.Path]::GetFullPath(
     (Join-Path $PSScriptRoot '..')
 )
 $runtimeScript = Join-Path $PSScriptRoot 'build-runtime.ps1'
+$serverScript = Join-Path $PSScriptRoot 'build-server.ps1'
 $packageJsonPath = Join-Path $repositoryRoot 'package.json'
 
 function Assert-LastExitCode {
@@ -22,6 +23,10 @@ function Assert-LastExitCode {
 
 if (-not (Test-Path -LiteralPath $runtimeScript -PathType Leaf)) {
     throw "Runtime build script was not found: $runtimeScript"
+}
+
+if (-not (Test-Path -LiteralPath $serverScript -PathType Leaf)) {
+    throw "Language server build script was not found: $serverScript"
 }
 
 if (-not (Test-Path -LiteralPath $packageJsonPath -PathType Leaf)) {
@@ -43,6 +48,10 @@ try {
     Write-Host '=== Preparing PascalABC.NET runtime ==='
     & $runtimeScript -PascalABCSourcePath $PascalABCSourcePath
     Assert-LastExitCode 'Runtime build'
+
+    Write-Host '=== Publishing PascalABC.NET language server ==='
+    & $serverScript
+    Assert-LastExitCode 'Language server publish'
 
     Write-Host '=== Restoring Node.js dependencies ==='
     & npm.cmd ci

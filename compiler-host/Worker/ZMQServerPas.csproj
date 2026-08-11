@@ -8,7 +8,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
-    <LegacyCompilerRoot>$(MSBuildThisFileDirectory)..\..\external\pascalabcnet\bin</LegacyCompilerRoot>
+    <PascalABCSourceRoot>$(MSBuildThisFileDirectory)..\..\externals\pascalabcnet-tooling\pascalabcnet</PascalABCSourceRoot>
+    <LegacyCompilerRoot>$(PascalABCSourceRoot)\bin</LegacyCompilerRoot>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(TargetFramework)' == 'net10.0'">
@@ -73,6 +74,6 @@
   </ItemGroup>
 
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
-    <ProjectReference Include="..\..\external\pascalabcnet\Compiler\Compiler.csproj" />
+    <ProjectReference Include="$(PascalABCSourceRoot)\Compiler\Compiler.csproj" />
   </ItemGroup>
 </Project>
