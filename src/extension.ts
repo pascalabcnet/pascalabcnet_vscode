@@ -1335,7 +1335,7 @@ function startLanguageServer(context: vscode.ExtensionContext): void {
         args: [
             '--stdio',
             '--documentation-language',
-            'en'
+            'ru'
         ],
         transport: TransportKind.stdio,
         options: {
