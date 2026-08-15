@@ -2,6 +2,24 @@
 
 All notable changes to the PascalABC.NET extension are documented in this file.
 
+## 0.4.0 — IntelliSense Documentation
+
+### Added
+
+- Parameter metadata and documentation in LSP signature help.
+- Pascal source documentation in semantic completion items.
+
+### Changed
+
+- The language server now uses Russian documentation for PascalABC.NET standard routines.
+- Updated the pinned PascalABC.NET tooling backend and compiler sources.
+
+### Fixed
+
+- Signature help for modern extension methods such as `AsSpan`.
+- IntelliSense resolution for .NET 10 system types, including generic types such as `PriorityQueue`.
+- Removed the redundant generic error popup when compiler diagnostics already identify the problem.
+
 ## 0.3.0 — Semantic IntelliSense
 
 ### Added

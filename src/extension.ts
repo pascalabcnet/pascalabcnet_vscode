@@ -959,10 +959,6 @@ async function performCompileActiveDocument(
                         `[error] ${response.message ?? 'Compilation failed'}`
                     );
 
-                    void vscode.window.showErrorMessage(
-                        'PascalABC.NET: ошибка компиляции.'
-                    );
-
                     const responseDiagnostics = response.diagnostics ?? [];
                     const focusedSingleError =
                         responseDiagnostics.length === 1 &&
