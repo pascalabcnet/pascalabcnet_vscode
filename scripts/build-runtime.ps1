@@ -261,7 +261,8 @@ function Copy-HostOutput {
     param(
         [string]$SourceRoot,
         [string]$DestinationRoot,
-        [string[]]$Suffixes
+        [string[]]$Suffixes,
+        [switch]$PreserveExisting
     )
 
     $sourcePrefix = [System.IO.Path]::GetFullPath($SourceRoot).TrimEnd('\') + '\'
@@ -282,6 +283,11 @@ function Copy-HostOutput {
 
         $relativePath = $sourceFile.FullName.Substring($sourcePrefix.Length)
         $targetPath = Join-Path $DestinationRoot $relativePath
+        if ($PreserveExisting -and
+            (Test-Path -LiteralPath $targetPath -PathType Leaf)) {
+            continue
+        }
+
         $targetDirectory = Split-Path -Parent $targetPath
         New-Item -ItemType Directory -Path $targetDirectory -Force | Out-Null
         Copy-Item -LiteralPath $sourceFile.FullName -Destination $targetPath -Force
@@ -292,7 +298,8 @@ function Invoke-PascalABCBuild {
     Write-Host 'Building PascalABC.NET compiler from the pinned submodule commit...'
     Push-Location $PascalABCSourcePath
     try {
-        & dotnet build -c Release --no-incremental --nologo -v:minimal `
+        & dotnet build -c Release --no-incremental --disable-build-servers `
+            -m:1 -p:BuildInParallel=false --nologo -v:minimal `
             PascalABCNET.sln -p:PABCNET_LEGACY_ONLY=true
         if ($LASTEXITCODE -ne 0) {
             throw "PascalABC.NET build failed with exit code $LASTEXITCODE."
@@ -345,6 +352,8 @@ function Invoke-ModernPascalABCBuild {
     & dotnet build $solutionPath `
         -c Release `
         -p:TargetFramework=net10.0 `
+        -p:BuildInParallel=false `
+        --disable-build-servers `
         -m:1 `
         --nologo `
         -v:minimal
@@ -397,7 +406,9 @@ function Invoke-HostBuild {
     & dotnet build $ProjectPath `
         -c Release `
         -f $TargetFramework `
+        --disable-build-servers `
         -m:1 `
+        -p:BuildInParallel=false `
         -p:SatelliteResourceLanguages=ru `
         --nologo `
         --output $OutputRoot
@@ -711,9 +722,9 @@ Copy-HostOutput $legacyControllerBuildRoot $legacyRuntimeRoot `
 Copy-HostOutput $legacyWorkerBuildRoot $legacyRuntimeRoot `
     @('.exe', '.exe.config')
 Copy-HostOutput $modernControllerBuildRoot $modernRuntimeRoot `
-    @('.dll', '.deps.json', '.runtimeconfig.json')
+    @('.dll', '.deps.json', '.runtimeconfig.json') -PreserveExisting
 Copy-HostOutput $modernWorkerBuildRoot $modernRuntimeRoot `
-    @('.dll', '.deps.json', '.runtimeconfig.json')
+    @('.dll', '.deps.json', '.runtimeconfig.json') -PreserveExisting
 
 $legacyLibRoot = Join-Path $legacyRuntimeRoot 'Lib'
 Copy-PascalLibraryArtifacts (Join-Path $pascalABCRuntimeRoot 'Lib') `

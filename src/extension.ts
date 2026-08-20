@@ -21,6 +21,7 @@ let runTerminal: vscode.Terminal | undefined;
 let activeRunExecution: vscode.TerminalShellExecution | undefined;
 let compilationInProgress = false;
 let compilationGeneration = 0;
+let lastPascalDocumentUri: vscode.Uri | undefined;
 
 type CompilerTarget = 'net-framework' | 'net10';
 
@@ -439,20 +440,34 @@ export function activate(context: vscode.ExtensionContext): void {
             }
         })
     );
+    rememberPascalEditor(vscode.window.activeTextEditor);
     context.subscriptions.push(
-        vscode.window.onDidChangeActiveTextEditor(() => {
+        vscode.window.onDidChangeActiveTextEditor(editor => {
+            rememberPascalEditor(editor);
             updateCompilerStatus(compilerStatus);
         })
     );
 
     const compileCommand = vscode.commands.registerCommand(
         'pascalabc.compileCurrentFile',
-        () => compileActiveDocument(context, output, diagnostics, false)
+        (resource?: vscode.Uri) => compileActiveDocument(
+            context,
+            output,
+            diagnostics,
+            false,
+            resource
+        )
     );
 
     const compileAndRunCommand = vscode.commands.registerCommand(
         'pascalabc.compileAndRun',
-        () => compileActiveDocument(context, output, diagnostics, true)
+        (resource?: vscode.Uri) => compileActiveDocument(
+            context,
+            output,
+            diagnostics,
+            true,
+            resource
+        )
     );
 
     const showOutputCommand = vscode.commands.registerCommand(
@@ -706,12 +721,64 @@ async function saveDocument(
     return await document.save() ? document : undefined;
 }
 
+function rememberPascalEditor(editor: vscode.TextEditor | undefined): void {
+    if (editor?.document.languageId === 'pascalabc') {
+        lastPascalDocumentUri = editor.document.uri;
+    }
+}
+
+function resolveCompileDocument(
+    resource: vscode.Uri | undefined
+): vscode.TextDocument | undefined {
+    const resourceDocument = resource
+        ? vscode.workspace.textDocuments.find(document =>
+            document.uri.toString() === resource.toString()
+        )
+        : undefined;
+
+    if (resourceDocument?.languageId === 'pascalabc') {
+        lastPascalDocumentUri = resourceDocument.uri;
+        return resourceDocument;
+    }
+
+    const activeDocument = vscode.window.activeTextEditor?.document;
+
+    if (activeDocument?.languageId === 'pascalabc') {
+        lastPascalDocumentUri = activeDocument.uri;
+        return activeDocument;
+    }
+
+    const rememberedDocument = lastPascalDocumentUri
+        ? vscode.workspace.textDocuments.find(document =>
+            document.uri.toString() === lastPascalDocumentUri?.toString()
+        )
+        : undefined;
+
+    if (rememberedDocument?.languageId === 'pascalabc') {
+        return rememberedDocument;
+    }
+
+    return vscode.window.visibleTextEditors.find(editor =>
+        editor.document.languageId === 'pascalabc'
+    )?.document;
+}
+
 async function compileActiveDocument(
     context: vscode.ExtensionContext,
     output: vscode.OutputChannel,
     diagnostics: vscode.DiagnosticCollection,
-    runAfterSuccess: boolean
+    runAfterSuccess: boolean,
+    resource?: vscode.Uri
 ): Promise<void> {
+    const document = resolveCompileDocument(resource);
+
+    if (!document) {
+        void vscode.window.showErrorMessage(
+            'Нет активного файла PascalABC.NET для компиляции.'
+        );
+        return;
+    }
+
     if (compilationInProgress) {
         const action = await vscode.window.showWarningMessage(
             'PascalABC.NET: компиляция уже выполняется.',
@@ -734,7 +801,8 @@ async function compileActiveDocument(
             context,
             output,
             diagnostics,
-            runAfterSuccess
+            runAfterSuccess,
+            document
         );
     } finally {
         if (compilationGeneration === generation) {
@@ -752,18 +820,10 @@ async function performCompileActiveDocument(
     context: vscode.ExtensionContext,
     output: vscode.OutputChannel,
     diagnostics: vscode.DiagnosticCollection,
-    runAfterSuccess: boolean
+    runAfterSuccess: boolean,
+    initialDocument: vscode.TextDocument
 ): Promise<void> {
-            const editor = vscode.window.activeTextEditor;
-
-            if (!editor) {
-                void vscode.window.showErrorMessage(
-                    'Нет активного файла для компиляции.'
-                );
-                return;
-            }
-
-            let document = editor.document;
+            let document = initialDocument;
 
             if (document.uri.scheme === 'untitled') {
                 const saveAction = await vscode.window.showInformationMessage(
@@ -863,7 +923,9 @@ async function performCompileActiveDocument(
                 context.subscriptions.push(controller);
             }
 
-            output.show(true);
+            if (!runAfterSuccess) {
+                output.show(true);
+            }
             output.appendLine('');
             output.appendLine(
                 `Compiling ${sourceFileName} with ${compilerProfile.label}`
@@ -891,7 +953,11 @@ async function performCompileActiveDocument(
                     );
 
                     if (runAfterSuccess) {
-                        const editorBeforeRun = vscode.window.activeTextEditor;
+                        const editorBeforeRun =
+                            vscode.window.visibleTextEditors.find(editor =>
+                                editor.document.uri.toString() ===
+                                document.uri.toString()
+                            );
                         const sourceExtension = path.extname(sourceFileName);
                         const reportedOutputFile = response.outputFile?.trim() ||
                             sourceFileName.slice(0, -sourceExtension.length) + '.exe';
@@ -988,15 +1054,13 @@ async function performCompileActiveDocument(
                     );
 
                     const responseDiagnostics = response.diagnostics ?? [];
-                    const focusedSingleError =
-                        responseDiagnostics.length === 1 &&
+                    if (responseDiagnostics.length === 1) {
                         await focusDiagnostic(responseDiagnostics[0]);
-
-                    if (!focusedSingleError) {
-                        await vscode.commands.executeCommand(
-                            'workbench.action.problems.focus'
-                        );
                     }
+
+                    await vscode.commands.executeCommand(
+                        'workbench.action.problems.focus'
+                    );
                 }
             } catch (error) {
                 if (error instanceof CompilerControllerStoppedError) {
