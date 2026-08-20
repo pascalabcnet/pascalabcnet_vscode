@@ -14,9 +14,9 @@ $nestedCompilerPath = Join-Path $toolingRoot `
     'pascalabcnet\PascalABCNET.sln'
 $buildRoot = Join-Path $repositoryRoot '.build'
 $nextServerRoot = Join-Path $buildRoot 'server-next'
-$serverParent = Join-Path $repositoryRoot 'server'
-$outputRoot = Join-Path $serverParent 'win-x64'
-$runtimeLibRoot = Join-Path $repositoryRoot 'bin\net10\Lib'
+$modernRuntimeRoot = Join-Path $repositoryRoot 'bin\net10'
+$runtimeLibRoot = Join-Path $modernRuntimeRoot 'Lib'
+$legacyOutputRoot = Join-Path $repositoryRoot 'server\win-x64'
 
 function Assert-LastExitCode {
     param([string]$Step)
@@ -62,27 +62,31 @@ if (Test-Path -LiteralPath $nextServerRoot) {
 }
 New-Item -ItemType Directory -Path $nextServerRoot -Force | Out-Null
 
-Write-Host '=== Publishing self-contained win-x64 language server ==='
+Write-Host '=== Publishing portable framework-dependent language server ==='
 & dotnet publish $projectPath `
     --configuration Release `
-    --runtime win-x64 `
-    --self-contained true `
+    --self-contained false `
+    --disable-build-servers `
+    -m:1 `
+    -p:UseAppHost=false `
+    -p:BuildInParallel=false `
+    -p:SatelliteResourceLanguages=ru `
     --output $nextServerRoot `
     --nologo
 Assert-LastExitCode 'Language server publish'
 
-Write-Host '=== Copying PascalABC.NET standard library for language services ==='
-Copy-Item -LiteralPath $runtimeLibRoot `
-    -Destination (Join-Path $nextServerRoot 'Lib') `
-    -Recurse `
-    -Force
+Write-Host '=== Reusing PascalABC.NET standard library from bin\net10 ==='
+$publishedLibRoot = Join-Path $nextServerRoot 'Lib'
+if (Test-Path -LiteralPath $publishedLibRoot) {
+    Remove-Item -LiteralPath $publishedLibRoot -Recurse -Force
+}
+Get-ChildItem -LiteralPath $nextServerRoot -File -Recurse `
+    -Filter '*.pdb' | Remove-Item -Force
 
 $requiredFiles = @(
-    'PascalABCNet.LanguageServer.exe',
     'PascalABCNet.LanguageServer.dll',
     'PascalABCNet.LanguageServer.deps.json',
-    'PascalABCNet.LanguageServer.runtimeconfig.json',
-    'Lib\PABCSystem.pcu'
+    'PascalABCNet.LanguageServer.runtimeconfig.json'
 )
 foreach ($fileName in $requiredFiles) {
     $filePath = Join-Path $nextServerRoot $fileName
@@ -91,11 +95,53 @@ foreach ($fileName in $requiredFiles) {
     }
 }
 
-if (Test-Path -LiteralPath $outputRoot) {
-    Remove-Item -LiteralPath $outputRoot -Recurse -Force
-}
-New-Item -ItemType Directory -Path $serverParent -Force | Out-Null
-Move-Item -LiteralPath $nextServerRoot -Destination $outputRoot
+Write-Host '=== Merging language server into the shared .NET 10 runtime ==='
+Get-ChildItem -LiteralPath $modernRuntimeRoot -File -Recurse `
+    -Filter '*.pdb' | Remove-Item -Force
+Get-ChildItem -LiteralPath $modernRuntimeRoot -File `
+    -Filter 'PascalABCNet.LanguageServer.*' | Remove-Item -Force
 
-$serverExecutable = Join-Path $outputRoot 'PascalABCNet.LanguageServer.exe'
-Write-Host "Language server published successfully: $serverExecutable"
+foreach ($sourceFile in Get-ChildItem -LiteralPath $nextServerRoot -File -Recurse) {
+    $relativePath = $sourceFile.FullName.Substring($nextServerRoot.Length + 1)
+    $destinationPath = Join-Path $modernRuntimeRoot $relativePath
+
+    if (Test-Path -LiteralPath $destinationPath -PathType Leaf) {
+        $sourceHash = (Get-FileHash -LiteralPath $sourceFile.FullName `
+            -Algorithm SHA256).Hash
+        $destinationHash = (Get-FileHash -LiteralPath $destinationPath `
+            -Algorithm SHA256).Hash
+
+        if ($sourceHash -ne $destinationHash) {
+            throw @"
+The language server and compiler runtime contain different versions of:
+  $relativePath
+
+Run scripts\build-runtime.ps1 and then scripts\build-server.ps1 using the
+same PascalABC.NET tooling revision.
+"@
+        }
+
+        continue
+    }
+
+    $destinationDirectory = Split-Path -Parent $destinationPath
+    New-Item -ItemType Directory -Path $destinationDirectory `
+        -Force | Out-Null
+    Copy-Item -LiteralPath $sourceFile.FullName `
+        -Destination $destinationPath
+}
+
+foreach ($fileName in $requiredFiles) {
+    $filePath = Join-Path $modernRuntimeRoot $fileName
+    if (-not (Test-Path -LiteralPath $filePath -PathType Leaf)) {
+        throw "Installed language server component was not found: $filePath"
+    }
+}
+
+if (Test-Path -LiteralPath $legacyOutputRoot) {
+    Remove-Item -LiteralPath $legacyOutputRoot -Recurse -Force
+}
+
+$serverAssembly = Join-Path $modernRuntimeRoot `
+    'PascalABCNet.LanguageServer.dll'
+Write-Host "Language server published successfully: dotnet $serverAssembly"

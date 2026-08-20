@@ -15,3 +15,4 @@ bin/*.pas
 bin/*.pdb
 *.vsix
 *.vsix-last_published
+*.zip

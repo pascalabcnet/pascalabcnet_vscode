@@ -11,6 +11,7 @@ server/
 # Packaged extensions
 *.vsix
 *.vsix-last_published
+*.zip
 
 # Logs and temporary files
 *.log

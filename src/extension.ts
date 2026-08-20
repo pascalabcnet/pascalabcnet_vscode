@@ -11,6 +11,7 @@ import {
     LanguageClient,
     LanguageClientOptions,
     ServerOptions,
+    State,
     TransportKind
 } from 'vscode-languageclient/node';
 
@@ -415,7 +416,9 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.StatusBarAlignment.Right,
         100
     );
-    compilerStatus.command = 'pascalabc.selectCompilerTarget';
+    if (process.platform === 'win32') {
+        compilerStatus.command = 'pascalabc.selectCompilerTarget';
+    }
     compilerStatus.name = 'PascalABC.NET Compiler';
     updateCompilerStatus(compilerStatus);
     const snippetProvider = registerSnippetProvider(context);
@@ -480,6 +483,13 @@ export function activate(context: vscode.ExtensionContext): void {
     const selectCompilerTargetCommand = vscode.commands.registerCommand(
         'pascalabc.selectCompilerTarget',
         async () => {
+            if (process.platform !== 'win32') {
+                void vscode.window.showInformationMessage(
+                    'PascalABC.NET uses the .NET 10 compiler on Linux.'
+                );
+                return;
+            }
+
             const currentTarget = getCompilerTarget();
             const selected = await showCompilerTargetQuickPick(currentTarget);
 
@@ -601,7 +611,8 @@ export function activate(context: vscode.ExtensionContext): void {
 function showCompilerTargetQuickPick(
     currentTarget: CompilerTarget
 ): Promise<CompilerTargetQuickPickItem | undefined> {
-    const items: CompilerTargetQuickPickItem[] = [
+    const items: CompilerTargetQuickPickItem[] = process.platform === 'win32'
+        ? [
         {
             label: '.NET Framework 4.7.2',
             description: 'Classic PascalABC.NET runtime',
@@ -612,7 +623,14 @@ function showCompilerTargetQuickPick(
             description: 'Modern .NET runtime',
             target: 'net10'
         }
-    ];
+        ]
+        : [
+            {
+                label: '.NET 10',
+                description: 'Modern cross-platform runtime',
+                target: 'net10'
+            }
+        ];
     const quickPick = vscode.window.createQuickPick<CompilerTargetQuickPickItem>();
     quickPick.title = 'Select PascalABC.NET compiler';
     quickPick.placeholder = 'Choose a compiler target';
@@ -894,24 +912,34 @@ async function performCompileActiveDocument(
                         let terminalCreated = false;
 
                         if (!runTerminal) {
-                            runTerminal = vscode.window.createTerminal({
+                            const terminalOptions: vscode.TerminalOptions = {
                                 name: 'PascalABC.NET',
-                                cwd: workingDirectory,
-                                shellPath: 'powershell.exe'
-                            });
+                                cwd: workingDirectory
+                            };
+
+                            if (process.platform === 'win32') {
+                                terminalOptions.shellPath = 'powershell.exe';
+                            }
+
+                            runTerminal = vscode.window.createTerminal(
+                                terminalOptions
+                            );
                             terminalCreated = true;
                         }
 
                         const terminal = runTerminal;
                         terminal.show(false);
 
-                        const runCommand = compilerProfile.target === 'net10'
-                            ? `dotnet "${escapePowerShellDoubleQuoted(outputFile)}"`
-                            : `& "${escapePowerShellDoubleQuoted(outputFile)}"`;
-                        const commandLine =
-                            'Clear-Host; ' +
-                            `Set-Location -LiteralPath "${escapePowerShellDoubleQuoted(workingDirectory)}"; ` +
-                            runCommand;
+                        const commandLine = process.platform === 'win32'
+                            ? createPowerShellRunCommand(
+                                compilerProfile,
+                                workingDirectory,
+                                outputFile
+                            )
+                            : createPosixRunCommand(
+                                workingDirectory,
+                                outputFile
+                            );
 
                         const shellIntegration =
                             await waitForShellIntegration(terminal);
@@ -1148,7 +1176,39 @@ function escapePowerShellDoubleQuoted(value: string): string {
         .replace(/"/g, '`"');
 }
 
+function createPowerShellRunCommand(
+    profile: CompilerProfile,
+    workingDirectory: string,
+    outputFile: string
+): string {
+    const escapedOutputFile = escapePowerShellDoubleQuoted(outputFile);
+    const runCommand = profile.target === 'net10'
+        ? `dotnet "${escapedOutputFile}"`
+        : `& "${escapedOutputFile}"`;
+
+    return 'Clear-Host; ' +
+        `Set-Location -LiteralPath "${escapePowerShellDoubleQuoted(workingDirectory)}"; ` +
+        runCommand;
+}
+
+function quotePosixShell(value: string): string {
+    return `'${value.split("'").join("'\"'\"'")}'`;
+}
+
+function createPosixRunCommand(
+    workingDirectory: string,
+    outputFile: string
+): string {
+    return 'clear; ' +
+        `cd -- ${quotePosixShell(workingDirectory)}; ` +
+        `dotnet ${quotePosixShell(outputFile)}`;
+}
+
 function getCompilerTarget(): CompilerTarget {
+    if (process.platform !== 'win32') {
+        return 'net10';
+    }
+
     return vscode.workspace.getConfiguration('pascalabc').get<CompilerTarget>(
         'compilerTarget',
         'net-framework'
@@ -1163,7 +1223,9 @@ function getCompilerTargetLabel(): string {
 
 function updateCompilerStatus(status: vscode.StatusBarItem): void {
     status.text = `$(tools) PascalABC.NET: ${getCompilerTargetLabel()}`;
-    status.tooltip = 'Select PascalABC.NET compiler target';
+    status.tooltip = process.platform === 'win32'
+        ? 'Select PascalABC.NET compiler target'
+        : 'PascalABC.NET uses .NET 10 on Linux';
     if (vscode.window.activeTextEditor?.document.languageId === 'pascalabc') {
         status.show();
     } else {
@@ -1304,17 +1366,10 @@ function startLanguageServer(context: vscode.ExtensionContext): void {
     );
     context.subscriptions.push(output);
 
-    if (process.platform !== 'win32') {
-        output.warn(
-            'PascalABC.NET IntelliSense is currently bundled only for Windows.'
-        );
-        return;
-    }
-
     const serverPath = context.asAbsolutePath(path.join(
-        'server',
-        'win-x64',
-        'PascalABCNet.LanguageServer.exe'
+        'bin',
+        'net10',
+        'PascalABCNet.LanguageServer.dll'
     ));
 
     if (!fs.existsSync(serverPath)) {
@@ -1326,9 +1381,15 @@ function startLanguageServer(context: vscode.ExtensionContext): void {
         return;
     }
 
+    output.info(
+        `Starting Language Server on ${process.platform}/${process.arch}: ` +
+        `dotnet ${serverPath}`
+    );
+
     const serverOptions: ServerOptions = {
-        command: serverPath,
+        command: 'dotnet',
         args: [
+            serverPath,
             '--stdio',
             '--documentation-language',
             'ru'
@@ -1365,8 +1426,17 @@ function startLanguageServer(context: vscode.ExtensionContext): void {
         clientOptions
     );
 
+    context.subscriptions.push(client.onDidChangeState(event => {
+        output.info(
+            `Language Server state: ${State[event.oldState]} -> ` +
+            `${State[event.newState]}`
+        );
+    }));
+
     languageClient = client;
-    void client.start().catch((error: unknown) => {
+    void client.start().then(() => {
+        output.info('Language Server client started.');
+    }).catch((error: unknown) => {
         if (languageClient === client) {
             languageClient = undefined;
         }

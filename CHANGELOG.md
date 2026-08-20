@@ -8,14 +8,18 @@ All notable changes to the PascalABC.NET extension are documented in this file.
 
 - Parameter metadata and documentation in LSP signature help.
 - Pascal source documentation in semantic completion items.
+- Linux support for the .NET 10 compiler, IntelliSense, and integrated terminal execution.
 
 ### Changed
 
 - The language server now uses Russian documentation for PascalABC.NET standard routines.
+- The language server is now a portable framework-dependent .NET 10 process shared by Windows and Linux.
+- Linux automatically uses the .NET 10 compiler target; .NET Framework remains Windows-only.
 - Updated the pinned PascalABC.NET tooling backend and compiler sources.
 
 ### Fixed
 
+- IntelliSense startup on Linux when loading .NET assembly documentation.
 - Signature help for modern extension methods such as `AsSpan`.
 - IntelliSense resolution for .NET 10 system types, including generic types such as `PriorityQueue`.
 - Removed the redundant generic error popup when compiler diagnostics already identify the problem.

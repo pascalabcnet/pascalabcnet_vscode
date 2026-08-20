@@ -20,7 +20,7 @@ PascalABC.NET is also a practical tool for console applications, educational and
 - compile current file with `Ctrl+F9`
 - compile and run with `F9`
 - execution in an integrated terminal with console input support
-- selectable .NET Framework 4.7.2 and .NET 10 compiler runtimes
+- selectable .NET Framework 4.7.2 (Windows) and cross-platform .NET 10 compiler runtimes
 - commands for restarting the compiler process and showing its output
 
 ## Two Compiler Targets
@@ -29,8 +29,8 @@ The extension includes two independent PascalABC.NET compiler runtimes:
 
 | Target | Best suited for | Program launch |
 | --- | --- | --- |
-| .NET Framework 4.7.2 | compatibility with the classic PascalABC.NET environment | runs the generated `.exe` directly |
-| .NET 10 | modern .NET applications and current platform capabilities | runs the generated `.exe` with `dotnet` |
+| .NET Framework 4.7.2 | Windows; compatibility with the classic PascalABC.NET environment | runs the generated `.exe` directly |
+| .NET 10 | Windows and Linux; modern .NET applications and current platform capabilities | runs the generated `.exe` with `dotnet` |
 
 Select the target from the **PascalABC.NET** item in the status bar or run **PascalABC.NET: Select Compiler Target** from the Command Palette. Each target has its own compiler assemblies and compatible precompiled standard units.
 
@@ -45,15 +45,15 @@ Compiler errors are displayed directly in the editor. `Ctrl+F9` compiles the cur
 
 ## Platform Support
 
-This preview currently supports Windows. The compiler runtime required for ordinary PascalABC.NET programs is bundled with the extension, so a separate installation is not required for the basic compile-and-run workflow.
+This preview supports Windows and Linux. The compiler runtime required for ordinary PascalABC.NET programs is bundled with the extension, so a separate PascalABC.NET installation is not required for the basic compile-and-run workflow.
 
-The classic .NET Framework runtime is selected by default. The .NET 10 target requires the .NET 10 runtime to be installed on the computer.
+On Windows, both the classic .NET Framework 4.7.2 target and the modern .NET 10 target are available. On Linux, the extension automatically uses .NET 10 and does not offer the Windows-only .NET Framework target. The .NET 10 runtime must be installed on the computer; both the compiler and generated programs are launched through `dotnet`.
 
 Some optional modules depend on components normally installed with the full PascalABC.NET distribution. For example, `Graph3D` expects HelixToolkit and `NUnitABC` expects NUnit.
 
 ## IntelliSense
 
-Semantic language features are provided by the separate [PascalABC.NET Tooling](https://github.com/pascalabcnet/pascalabcnet-tooling) backend. The extension starts its self-contained .NET 10 language server as an independent process and communicates with it through the standard Language Server Protocol over stdio.
+Semantic language features are provided by the separate [PascalABC.NET Tooling](https://github.com/pascalabcnet/pascalabcnet-tooling) backend. The extension starts its portable framework-dependent .NET 10 language server through `dotnet` as an independent process and communicates with it through the standard Language Server Protocol over stdio.
 
 The language server owns document synchronization and PascalABC.NET semantic analysis, including global and member completion. The existing compiler controller remains an independent process and continues to handle explicit Compile and Run commands.
 
@@ -78,13 +78,13 @@ npm ci
 npm run compile
 ```
 
-Publish the self-contained Windows language server and compile the extension client with:
+Publish the portable .NET 10 language server and compile the extension client with:
 
 ```powershell
 npm run build
 ```
 
-The generated language server is placed in `server/win-x64/`. Both `server/` and the compiler runtime in `bin/` are generated locally and are not stored in Git.
+The generated language server is merged into the shared `bin/net10/` runtime, reusing the same compiler assemblies and standard library. The generated compiler runtime in `bin/` is not stored in Git.
 
 Open the repository in Visual Studio Code and press `F5` to launch an Extension Development Host window.
 
@@ -136,7 +136,7 @@ npm run compile
 npx --yes @vscode/vsce package
 ```
 
-Before invoking `vsce` directly, both `bin/` and `server/win-x64/` must contain their complete generated runtimes. The generated `.vsix` file is ignored by Git.
+Before invoking `vsce` directly, `bin/net-framework/` and `bin/net10/` must contain their complete generated runtimes, including the language server in `bin/net10/`. The generated `.vsix` file is ignored by Git.
 
 ## Updating the Tooling Backend
 

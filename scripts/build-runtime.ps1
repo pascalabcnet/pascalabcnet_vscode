@@ -398,6 +398,7 @@ function Invoke-HostBuild {
         -c Release `
         -f $TargetFramework `
         -m:1 `
+        -p:SatelliteResourceLanguages=ru `
         --nologo `
         --output $OutputRoot
 
