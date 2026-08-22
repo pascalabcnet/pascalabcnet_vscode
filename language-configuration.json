@@ -23,10 +23,15 @@
     ["'", "'"],
     ["\"", "\""]
   ],
+  "onEnterRules": [
+    {
+      "beforeText": "^\\s*$",
+      "action": { "indentAction": "none" }
+    }
+  ],
   "indentationRules": {
     "increaseIndentPattern": "^.*(?:\\b[bB][eE][gG][iI][nN]\\b|\\b[rR][eE][pP][eE][aA][tT]\\b|\\b[cC][aA][sS][eE]\\b.*\\b[oO][fF]\\b|\\b[tT][hH][eE][nN]\\b|\\b[dD][oO]\\b|\\b[eE][lL][sS][eE]\\b)\\s*(?://.*)?$",
     "decreaseIndentPattern": "^\\s*(?:[eE][nN][dD]\\b|[uU][nN][tT][iI][lL]\\b|[eE][lL][sS][eE]\\b)",
-    "indentNextLinePattern": "^.*\\b(?:[tT][hH][eE][nN]|[dD][oO]|[eE][lL][sS][eE])\\b\\s*(?://.*)?$",
-    "unIndentedLinePattern": "^\\s*(?://.*)?$"
+    "indentNextLinePattern": "^.*\\b(?:[tT][hH][eE][nN]|[dD][oO]|[eE][lL][sS][eE])\\b\\s*(?://.*)?$"
   }
 }
