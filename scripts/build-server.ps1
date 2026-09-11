@@ -26,6 +26,26 @@ function Assert-LastExitCode {
     }
 }
 
+function Get-Sha256Hash {
+    param([Parameter(Mandatory)][string]$Path)
+
+    $stream = [System.IO.File]::OpenRead($Path)
+    try {
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            return [System.BitConverter]::ToString(
+                $sha256.ComputeHash($stream)
+            ).Replace('-', '')
+        }
+        finally {
+            $sha256.Dispose()
+        }
+    }
+    finally {
+        $stream.Dispose()
+    }
+}
+
 if (-not (Test-Path -LiteralPath $projectPath -PathType Leaf) -or
     -not (Test-Path -LiteralPath $nestedCompilerPath -PathType Leaf)) {
     Write-Host '=== Initializing tooling submodules ==='
@@ -106,10 +126,8 @@ foreach ($sourceFile in Get-ChildItem -LiteralPath $nextServerRoot -File -Recurs
     $destinationPath = Join-Path $modernRuntimeRoot $relativePath
 
     if (Test-Path -LiteralPath $destinationPath -PathType Leaf) {
-        $sourceHash = (Get-FileHash -LiteralPath $sourceFile.FullName `
-            -Algorithm SHA256).Hash
-        $destinationHash = (Get-FileHash -LiteralPath $destinationPath `
-            -Algorithm SHA256).Hash
+        $sourceHash = Get-Sha256Hash -Path $sourceFile.FullName
+        $destinationHash = Get-Sha256Hash -Path $destinationPath
 
         if ($sourceHash -ne $destinationHash) {
             throw @"

@@ -1,8 +1,8 @@
 {
-  "name": "pascalabc-net",
-  "displayName": "PascalABC.NET",
-  "description": "Official PascalABC.NET language support, compilation, and execution for Visual Studio Code",
-  "version": "0.4.0",
+  "name": "multitarget-pascalabc-net",
+  "displayName": "Multitarget PascalABC.NET",
+  "description": "PascalABC.NET language support, IntelliSense, compilation, and execution for Visual Studio Code by the PascalABC.NET Team",
+  "version": "0.5.0",
   "publisher": "pascalabcnet",
   "preview": true,
   "icon": "images/pascalabc-net.png",
@@ -26,7 +26,9 @@
     "PascalABC.NET",
     "Pascal",
     "education",
-    "compiler"
+    "compiler",
+    "multitarget",
+    "IntelliSense"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -35,11 +37,75 @@
         "editor.inlineSuggest.enabled": false
       },
       "editor.tokenColorCustomizations": {
+        "[*Light*]": {
+          "textMateRules": [
+            {
+              "scope": [
+                "keyword.control.block.pascalabc",
+                "keyword.operator.word.pascalabc",
+                "keyword.control.pascalabc",
+                "keyword.control.import.pascalabc"
+              ],
+              "settings": {
+                "foreground": "#0000FF",
+                "fontStyle": "bold"
+              }
+            },
+            {
+              "scope": [
+                "keyword.declaration.pascalabc",
+                "keyword.other.pascalabc",
+                "storage.modifier.pascalabc",
+                "storage.type.function.pascalabc"
+              ],
+              "settings": {
+                "foreground": "#0000FF",
+                "fontStyle": "bold"
+              }
+            },
+            {
+              "scope": "storage.modifier.variable.pascalabc",
+              "settings": {
+                "foreground": "#C42B1C",
+                "fontStyle": "bold"
+              }
+            },
+            {
+              "scope": "storage.type.pascalabc",
+              "settings": {
+                "foreground": "#267F99"
+              }
+            },
+            {
+              "scope": "entity.name.function.pascalabc",
+              "settings": {
+                "foreground": "#795E26"
+              }
+            },
+            {
+              "scope": "constant.language.pascalabc",
+              "settings": {
+                "foreground": "#0000FF"
+              }
+            },
+            {
+              "scope": [
+                "constant.numeric.hex.pascalabc",
+                "constant.numeric.binary.pascalabc",
+                "constant.numeric.float.pascalabc",
+                "constant.numeric.integer.pascalabc"
+              ],
+              "settings": {
+                "foreground": "#098658"
+              }
+            }
+          ]
+        },
         "textMateRules": [
           {
             "scope": "keyword.control.block.pascalabc",
             "settings": {
-              "foreground": "#D7BA7D",
+              "foreground": "#E5C07B",
               "fontStyle": "bold"
             }
           },
@@ -60,7 +126,7 @@
           {
             "scope": "keyword.control.import.pascalabc",
             "settings": {
-              "foreground": "#C586C0",
+              "foreground": "#D16DD1",
               "fontStyle": "bold"
             }
           },
@@ -265,9 +331,9 @@
   "scripts": {
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "build:server": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-server.ps1",
+    "build:server": "powershell.exe -NoProfile -File ./scripts/build-server.ps1",
     "build": "npm run build:server && npm run compile",
-    "package": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-vsix.ps1"
+    "package": "powershell.exe -NoProfile -File ./scripts/build-vsix.ps1"
   },
   "dependencies": {
     "vscode-languageclient": "9.0.1"

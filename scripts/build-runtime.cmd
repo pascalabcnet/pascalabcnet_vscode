@@ -1,5 +1,5 @@
 @echo off
 setlocal
 
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File "%~dp0build-runtime.ps1" %*
+powershell.exe -NoProfile -File "%~dp0build-runtime.ps1" %*
 exit /b %errorlevel%

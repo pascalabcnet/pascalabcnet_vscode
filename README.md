@@ -1,6 +1,6 @@
-# PascalABC.NET for Visual Studio Code
+# Multitarget PascalABC.NET for Visual Studio Code
 
-The official Visual Studio Code extension for writing, compiling, and running PascalABC.NET programs.
+Multitarget PascalABC.NET provides PascalABC.NET language support, IntelliSense, compilation, and execution in Visual Studio Code. It is developed and maintained by the PascalABC.NET Team.
 
 ## About PascalABC.NET
 
@@ -23,9 +23,9 @@ PascalABC.NET is also a practical tool for console applications, educational and
 - selectable .NET Framework 4.7.2 (Windows) and cross-platform .NET 10 compiler runtimes
 - commands for restarting the compiler process and showing its output
 
-## Two Compiler Targets
+## Compiler Targets
 
-The extension includes two independent PascalABC.NET compiler runtimes:
+The name **Multitarget PascalABC.NET** reflects the two independent PascalABC.NET compiler runtimes included with the extension:
 
 | Target | Best suited for | Program launch |
 | --- | --- | --- |
@@ -33,6 +33,26 @@ The extension includes two independent PascalABC.NET compiler runtimes:
 | .NET 10 | Windows and Linux; modern .NET applications and current platform capabilities | runs the generated `.exe` with `dotnet` |
 
 Select the target from the **PascalABC.NET** item in the status bar or run **PascalABC.NET: Select Compiler Target** from the Command Palette. Each target has its own compiler assemblies and compatible precompiled standard units.
+
+## Architecture and Local Tooling
+
+This is a development-tool extension, not only a syntax-highlighting package. The VSIX contains the PascalABC.NET compiler and the local tooling binaries required for IntelliSense and compilation.
+
+The TypeScript extension starts these components as child processes when needed:
+
+- `PascalABCNet.LanguageServer.dll` runs through `dotnet` and provides semantic IntelliSense over the Language Server Protocol using stdio.
+- `PABCCompilerController.exe` is used for the .NET Framework target; its .NET 10 counterpart is `PABCCompilerController.dll`, launched through `dotnet`. The controller accepts JSON Lines requests from the extension and manages compiler-worker lifetime.
+- `ZMQServerPas.exe` or `ZMQServerPas.dll` is the compiler worker. It loads the selected PascalABC.NET compiler runtime and performs compilation outside the VS Code extension host.
+
+The controller selects an available loopback TCP port and communicates with its worker through local NetMQ request/reply messaging. The corresponding NetMQ dependencies, including `NaCl.dll`, are bundled because they are required by this IPC layer.
+
+## Runtime Behavior
+
+**Compile Current File** saves a modified document, starts the selected controller lazily, sends a compile request, and publishes the returned PascalABC.NET diagnostics in VS Code.
+
+**Compile and Run** uses the same compilation path. After successful compilation it starts the generated program in the integrated terminal so that console input and output remain available. The program is run directly for .NET Framework or through `dotnet` for .NET 10; it is not executed by the language server or compiler worker.
+
+**Restart Compiler** stops the current controller and its worker, clears compiler diagnostics, and leaves the next compilation to start a fresh controller lazily. Closing VS Code also disposes the controller and language client.
 
 ## Getting Started
 
@@ -57,86 +77,65 @@ Semantic language features are provided by the separate [PascalABC.NET Tooling](
 
 The language server owns document synchronization and PascalABC.NET semantic analysis, including global and member completion. The existing compiler controller remains an independent process and continues to handle explicit Compile and Run commands.
 
-## Development
+## Source Code
 
-Clone the repository together with its submodule:
+The complete extension source is available at [github.com/pascalabcnet/pascalabcnet_vscode](https://github.com/pascalabcnet/pascalabcnet_vscode). Issues can be reported through the repository's [issue tracker](https://github.com/pascalabcnet/pascalabcnet_vscode/issues).
+
+The semantic backend is maintained in the public [PascalABC.NET Tooling](https://github.com/pascalabcnet/pascalabcnet-tooling) repository.
+
+## Building from Source
+
+The complete Windows packaging workflow requires Git, Node.js with npm, PowerShell, the .NET 10 SDK, and a Windows environment capable of running the .NET Framework 4.7.2 compiler-host smoke test.
+
+Clone the repository and its transitive submodules:
 
 ```powershell
 git clone --recurse-submodules https://github.com/pascalabcnet/pascalabcnet_vscode.git
+cd pascalabcnet_vscode
 ```
 
-For an existing clone, initialize or update the pinned submodule with:
+For an existing clone, initialize the pinned revisions with:
 
 ```powershell
 git submodule update --init --recursive
 ```
 
-Install the pinned Node.js dependencies and compile the TypeScript extension:
+Install the pinned Node.js dependencies and compile TypeScript:
 
 ```powershell
 npm ci
 npm run compile
 ```
 
-Publish the portable .NET 10 language server and compile the extension client with:
+Open the repository in Visual Studio Code and press `F5` to launch an Extension Development Host. A complete generated runtime must already be present in `bin/`.
+
+Build and validate both compiler runtimes:
 
 ```powershell
-npm run build
+./scripts/build-runtime.ps1
 ```
 
-The generated language server is merged into the shared `bin/net10/` runtime, reusing the same compiler assemblies and standard library. The generated compiler runtime in `bin/` is not stored in Git.
-
-Open the repository in Visual Studio Code and press `F5` to launch an Extension Development Host window.
-
-Preparing the runtime requires the .NET SDK used by the pinned PascalABC.NET sources. Build a clean runtime from the submodule with:
+Publish the framework-dependent .NET 10 language server and merge it into the shared `bin/net10/` runtime:
 
 ```powershell
-.\scripts\build-runtime.ps1
+./scripts/build-server.ps1
 ```
 
-From Command Prompt (`cmd.exe`), use the wrapper:
+Build the runtimes and language server, restore Node.js dependencies, compile TypeScript, and create the complete VSIX:
+
+```powershell
+npm run package
+```
+
+Command Prompt wrappers are also available:
 
 ```bat
 scripts\build-runtime.cmd
-```
-
-The script builds the compiler solution, rebuilds the standard PCU modules, builds the controller and worker, then stages and validates the new runtime before atomically replacing the generated `bin/` directory. A different PascalABC.NET source checkout can be selected with `-PascalABCSourcePath`.
-
-To publish only the language server, run:
-
-```powershell
-.\scripts\build-server.ps1
-```
-
-From Command Prompt, use `scripts\build-server.cmd`.
-
-To prepare the runtime, restore Node.js dependencies, compile TypeScript, and package the complete VSIX in one step from Command Prompt, run:
-
-```bat
+scripts\build-server.cmd
 scripts\build-vsix.cmd
 ```
 
-The resulting file is named from the extension version in `package.json`, for example `pascalabc-net-0.3.0.vsix`.
-
-## Building a VSIX
-
-The recommended command builds the compiler runtime and language server, restores Node.js dependencies, compiles TypeScript, and packages the VSIX:
-
-```powershell
-.\scripts\build-vsix.ps1
-```
-
-From Command Prompt, use `scripts\build-vsix.cmd`.
-
-If all generated components have already been prepared, the equivalent final packaging steps are:
-
-```powershell
-npm ci
-npm run compile
-npx --yes @vscode/vsce package
-```
-
-Before invoking `vsce` directly, `bin/net-framework/` and `bin/net10/` must contain their complete generated runtimes, including the language server in `bin/net10/`. The generated `.vsix` file is ignored by Git.
+The package filename is derived from the extension name and version, for example `multitarget-pascalabc-net-0.5.0.vsix`. Generated files under `bin/`, `out/`, and `.build/` are intentionally not committed; the scripts reconstruct them from the pinned public source revisions.
 
 ## Updating the Tooling Backend
 
@@ -154,7 +153,7 @@ Do not update `externals/pascalabcnet-tooling/pascalabcnet` directly from this r
 To install it locally:
 
 ```powershell
-code --install-extension .\pascalabc-net-0.3.0.vsix
+code --install-extension .\multitarget-pascalabc-net-0.5.0.vsix
 ```
 
 ## Commands

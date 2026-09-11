@@ -2,6 +2,17 @@
 
 All notable changes to the PascalABC.NET extension are documented in this file.
 
+## 0.5.0 — Multitarget Branding and Transparency
+
+### Changed
+
+- Renamed the Marketplace identity to **Multitarget PascalABC.NET**.
+- Updated the extension branding and logo.
+- Clarified the Marketplace description and attribution to the PascalABC.NET Team.
+- Documented the bundled compiler, language server, controller, worker, local IPC, process execution, compiler targets, and source build procedure.
+- Improved PascalABC.NET highlighting in light and dark editor themes.
+- Removed unnecessary `ExecutionPolicy Bypass` flags from the Windows build commands.
+
 ## 0.4.0 — IntelliSense Documentation
 
 ### Added

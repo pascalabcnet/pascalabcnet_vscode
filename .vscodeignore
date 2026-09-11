@@ -1,4 +1,6 @@
 .vscode/**
+.git/**
+.vs/**
 .gitmodules
 .gitignore
 .gitattributes
@@ -16,3 +18,15 @@ bin/*.pdb
 *.vsix
 *.vsix-last_published
 *.zip
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+.env
+.env.*
+*.pem
+*.key
+test.md
+zOld_vsix/**
