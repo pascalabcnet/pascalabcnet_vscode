@@ -44,7 +44,7 @@ The TypeScript extension starts these components as child processes when needed:
 - `PABCCompilerController.exe` is used for the .NET Framework target; its .NET 10 counterpart is `PABCCompilerController.dll`, launched through `dotnet`. The controller accepts JSON Lines requests from the extension and manages compiler-worker lifetime.
 - `ZMQServerPas.exe` or `ZMQServerPas.dll` is the compiler worker. It loads the selected PascalABC.NET compiler runtime and performs compilation outside the VS Code extension host.
 
-The controller selects an available loopback TCP port and communicates with its worker through local NetMQ request/reply messaging. The corresponding NetMQ dependencies, including `NaCl.dll`, are bundled because they are required by this IPC layer.
+The controller selects an available loopback TCP port and communicates with its worker through local NetMQ request/reply messaging. The required runtime components are bundled with the extension.
 
 ## Runtime Behavior
 
