@@ -24,6 +24,13 @@ internal static class Program
         public int id { get; set; }
         public string? command { get; set; }
         public string? fileName { get; set; }
+        public string? outputDirectory { get; set; }
+    }
+
+    private sealed class WorkerCompileRequest
+    {
+        public string? fileName { get; set; }
+        public string? outputDirectory { get; set; }
     }
 
     private static RequestSocket CreateClient(string address)
@@ -465,8 +472,21 @@ internal static class Program
                             }
 
                             fileName = Path.GetFullPath(fileName);
+                            var outputDirectory = request.outputDirectory;
+                            if (!string.IsNullOrWhiteSpace(outputDirectory))
+                            {
+                                outputDirectory = Path.GetFullPath(outputDirectory);
+                                Directory.CreateDirectory(outputDirectory);
+                            }
+
+                            var workerRequest = SerializeJson(
+                                new WorkerCompileRequest
+                                {
+                                    fileName = fileName,
+                                    outputDirectory = outputDirectory
+                                });
                             var workerResponse = SendRequest(
-                                fileName, workerFileName, port, address,
+                                workerRequest, workerFileName, port, address,
                                 ref worker, ref client);
                             compilationCount++;
                             var workingSetMb = GetWorkingSetMb(worker);

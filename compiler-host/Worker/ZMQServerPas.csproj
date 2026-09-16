@@ -20,11 +20,9 @@
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies.net472"
                       Version="1.0.3"
                       PrivateAssets="all" />
+    <Reference Include="System.Web.Extensions" />
     <Reference Include="AsyncIO">
       <HintPath>..\dependencies\netmq\AsyncIO.dll</HintPath>
-    </Reference>
-    <Reference Include="NaCl">
-      <HintPath>..\dependencies\netmq\NaCl.dll</HintPath>
     </Reference>
     <Reference Include="NetMQ">
       <HintPath>..\dependencies\netmq\NetMQ.dll</HintPath>

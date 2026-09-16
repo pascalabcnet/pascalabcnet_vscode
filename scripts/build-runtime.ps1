@@ -99,7 +99,6 @@ $modernCompilerDlls = @($compilerCoreDlls)
 
 $hostDependencies = @(
     'AsyncIO.dll',
-    'NaCl.dll',
     'NetMQ.dll',
     'System.Buffers.dll',
     'System.Memory.dll',
@@ -475,9 +474,11 @@ function Test-CompilerRuntime {
     $sampleDirectory = Join-Path $buildRoot 'папка с пробелами'
     New-Item -ItemType Directory -Path $sampleDirectory -Force | Out-Null
     $samplePath = Join-Path $sampleDirectory 'Часы.pas'
+    $inputPath = Join-Path $sampleDirectory 'input.txt'
+    'runtime smoke test' | Set-Content -LiteralPath $inputPath -Encoding UTF8
     @(
         'begin'
-        "  Println('runtime smoke test');"
+        "  Println(ReadAllText('input.txt'));"
         'end.'
     ) | Set-Content -LiteralPath $samplePath -Encoding UTF8
 
@@ -515,10 +516,12 @@ function Test-CompilerRuntime {
             throw "Controller ping failed: $($pingResponse | ConvertTo-Json -Compress)"
         }
 
+        $outputDirectory = Join-Path $sampleDirectory 'output'
         $compileRequest = @{
             id = 2
             command = 'compile'
             fileName = $samplePath
+            outputDirectory = $outputDirectory
         } | ConvertTo-Json -Compress
         Write-ControllerRequest $process $compileRequest
         $compileResponse = Read-ControllerResponse $process 40
@@ -530,14 +533,31 @@ function Test-CompilerRuntime {
             throw "Controller changed the Unicode source path: $($compileResponse.fileName)"
         }
 
-        $outputPath = [System.IO.Path]::ChangeExtension($samplePath, '.exe')
+        $sourceOutputPath = [System.IO.Path]::ChangeExtension($samplePath, '.exe')
+        if (Test-Path -LiteralPath $sourceOutputPath) {
+            throw "Controller left an output file beside the source: $sourceOutputPath"
+        }
+
+        $outputPath = Join-Path $outputDirectory (
+            [System.IO.Path]::GetFileNameWithoutExtension($samplePath) + '.exe'
+        )
         Assert-FileExists $outputPath
-        if ($Target -eq 'net10') {
-            $programOutput = & dotnet $outputPath
+        Push-Location $sampleDirectory
+        try {
+            if ($Target -eq 'net10') {
+                $programOutput = & dotnet $outputPath
+            }
+            else {
+                $programOutput = & $outputPath
+            }
+
             if ($LASTEXITCODE -ne 0 -or
                 $programOutput -notcontains 'runtime smoke test') {
-                throw 'The .NET 10 compiled program did not run successfully.'
+                throw "$Target compiled program did not read input.txt from the source directory."
             }
+        }
+        finally {
+            Pop-Location
         }
 
         $shutdownRequest = @{ id = 3; command = 'shutdown' } |

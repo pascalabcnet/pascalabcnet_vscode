@@ -12,6 +12,11 @@ All notable changes to the PascalABC.NET extension are documented in this file.
 - Documented the bundled compiler, language server, controller, worker, local IPC, process execution, compiler targets, and source build procedure.
 - Improved PascalABC.NET highlighting in light and dark editor themes.
 - Removed unnecessary `ExecutionPolicy Bypass` flags from the Windows build commands.
+- Compilation artifacts are stored in the extension's shared output directory instead of beside Pascal source files; programs still use the source directory as their working directory.
+
+### Added
+
+- A command for opening the compilation output directory from VS Code.
 
 ## 0.4.0 — IntelliSense Documentation
 

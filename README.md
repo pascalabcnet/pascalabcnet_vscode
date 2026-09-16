@@ -52,6 +52,8 @@ The controller selects an available loopback TCP port and communicates with its 
 
 **Compile and Run** uses the same compilation path. After successful compilation it starts the generated program in the integrated terminal so that console input and output remain available. The program is run directly for .NET Framework or through `dotnet` for .NET 10; it is not executed by the language server or compiler worker.
 
+Generated executables and their companion files are placed in a shared `output` directory in the extension's VS Code storage instead of beside the Pascal source. Programs still run with the source directory as their working directory, so relative paths such as `ReadAllText('input.txt')` continue to resolve next to the `.pas` file. Use **PascalABC.NET: Open Compilation Output Folder** to open this directory.
+
 **Restart Compiler** stops the current controller and its worker, clears compiler diagnostics, and leaves the next compilation to start a fresh controller lazily. Closing VS Code also disposes the controller and language client.
 
 ## Getting Started
@@ -135,7 +137,7 @@ scripts\build-server.cmd
 scripts\build-vsix.cmd
 ```
 
-The package filename is derived from the extension name and version, for example `multitarget-pascalabc-net-0.5.0.vsix`. Generated files under `bin/`, `out/`, and `.build/` are intentionally not committed; the scripts reconstruct them from the pinned public source revisions.
+The package filename is derived from the extension name and version, for example `multitarget-pascalabc-net-0.5.1.vsix`. Generated files under `bin/`, `out/`, and `.build/` are intentionally not committed; the scripts reconstruct them from the pinned public source revisions.
 
 ## Updating the Tooling Backend
 
@@ -153,7 +155,7 @@ Do not update `externals/pascalabcnet-tooling/pascalabcnet` directly from this r
 To install it locally:
 
 ```powershell
-code --install-extension .\multitarget-pascalabc-net-0.5.0.vsix
+code --install-extension .\multitarget-pascalabc-net-0.5.1.vsix
 ```
 
 ## Commands
@@ -163,6 +165,7 @@ code --install-extension .\multitarget-pascalabc-net-0.5.0.vsix
 | PascalABC.NET: Compile and Run | `F9` |
 | PascalABC.NET: Compile Current File | `Ctrl+F9` |
 | PascalABC.NET: Show Output | — |
+| PascalABC.NET: Open Compilation Output Folder | — |
 | PascalABC.NET: Restart Compiler | — |
 | PascalABC.NET: Select Compiler Target | — |
 

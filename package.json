@@ -2,7 +2,7 @@
   "name": "multitarget-pascalabc-net",
   "displayName": "Multitarget PascalABC.NET",
   "description": "PascalABC.NET language support, IntelliSense, compilation, and execution for Visual Studio Code by the PascalABC.NET Team",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "publisher": "pascalabcnet",
   "preview": true,
   "icon": "images/pascalabc-net.png",
@@ -226,6 +226,10 @@
       {
         "command": "pascalabc.showOutput",
         "title": "PascalABC.NET: Show Output"
+      },
+      {
+        "command": "pascalabc.openOutputFolder",
+        "title": "PascalABC.NET: Open Compilation Output Folder"
       },
       {
         "command": "pascalabc.restartCompiler",

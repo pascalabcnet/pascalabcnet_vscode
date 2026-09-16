@@ -22,9 +22,6 @@
     <Reference Include="AsyncIO">
       <HintPath>..\dependencies\netmq\AsyncIO.dll</HintPath>
     </Reference>
-    <Reference Include="NaCl">
-      <HintPath>..\dependencies\netmq\NaCl.dll</HintPath>
-    </Reference>
     <Reference Include="NetMQ">
       <HintPath>..\dependencies\netmq\NetMQ.dll</HintPath>
     </Reference>

@@ -6,17 +6,41 @@ using NetMQ;
 using NetMQ.Sockets;
 using PascalABCCompiler;
 using PascalABCCompiler.Errors;
+#if NETFRAMEWORK
+using System.Web.Script.Serialization;
+#else
+using System.Text.Json;
+#endif
 
 namespace PascalABCNet.CompilerWorker;
 
 internal static class Program
 {
-    private static string CompileFile(Compiler compiler, string fileName)
+    private sealed class CompileRequest
+    {
+        public string? fileName { get; set; }
+        public string? outputDirectory { get; set; }
+    }
+
+    private static CompileRequest DeserializeCompileRequest(string json)
+    {
+#if NETFRAMEWORK
+        return new JavaScriptSerializer().Deserialize<CompileRequest>(json)
+               ?? throw new InvalidDataException("JSON-запрос не содержит объекта");
+#else
+        return JsonSerializer.Deserialize<CompileRequest>(json)
+               ?? throw new InvalidDataException("JSON-запрос не содержит объекта");
+#endif
+    }
+
+    private static string CompileFile(Compiler compiler, string requestJson)
     {
         var response = new StringBuilder();
 
         try
         {
+            var request = DeserializeCompileRequest(requestJson);
+            var fileName = request.fileName ?? "";
             var fullFileName = Path.GetFullPath(fileName);
             if (!File.Exists(fullFileName))
             {
@@ -33,6 +57,13 @@ internal static class Program
                 Debug = false,
                 ForDebugging = false
             };
+
+            if (!string.IsNullOrWhiteSpace(request.outputDirectory))
+            {
+                var outputDirectory = Path.GetFullPath(request.outputDirectory);
+                Directory.CreateDirectory(outputDirectory);
+                options.OutputDirectory = outputDirectory;
+            }
 
             compiler.Reload();
             var outputFileName = compiler.Compile(options);

@@ -47,7 +47,6 @@ const legacyRequiredCompilerComponents = [
     'LambdaAnySynToSemConverter.dll',
     'LanguageIntegrator.dll',
     'Localization.dll',
-    'NaCl.dll',
     'NETGenerator.dll',
     'NetMQ.dll',
     'OptimizerConversion.dll',
@@ -138,12 +137,16 @@ class CompilerController implements vscode.Disposable {
     ) {
     }
 
-    public async compile(fileName: string): Promise<CompileResponse> {
+    public async compile(
+        fileName: string,
+        outputDirectory: string
+    ): Promise<CompileResponse> {
         await this.ensureStarted();
 
         return this.sendRequest({
             command: 'compile',
-            fileName
+            fileName,
+            outputDirectory
         });
     }
 
@@ -475,6 +478,18 @@ export function activate(context: vscode.ExtensionContext): void {
         () => output.show(false)
     );
 
+    const openOutputFolderCommand = vscode.commands.registerCommand(
+        'pascalabc.openOutputFolder',
+        async () => {
+            const outputDirectory = path.join(
+                context.globalStorageUri.fsPath,
+                'output'
+            );
+            await fs.promises.mkdir(outputDirectory, { recursive: true });
+            await vscode.env.openExternal(vscode.Uri.file(outputDirectory));
+        }
+    );
+
     const restartCompilerCommand = vscode.commands.registerCommand(
         'pascalabc.restartCompiler',
         () => {
@@ -615,6 +630,7 @@ export function activate(context: vscode.ExtensionContext): void {
         compileCommand,
         compileAndRunCommand,
         showOutputCommand,
+        openOutputFolderCommand,
         restartCompilerCommand,
         selectCompilerTargetCommand,
         newFileCommand,
@@ -932,8 +948,13 @@ async function performCompileActiveDocument(
             );
 
             try {
+                const outputDirectory = path.join(
+                    context.globalStorageUri.fsPath,
+                    'output'
+                );
+                await fs.promises.mkdir(outputDirectory, { recursive: true });
                 const response =
-                    await controller.compile(sourceFileName);
+                    await controller.compile(sourceFileName, outputDirectory);
 
                 publishDiagnostics(response, diagnostics);
 
