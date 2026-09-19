@@ -1057,6 +1057,10 @@ async function performCompileActiveDocument(
 
                                     activeRunExecution = undefined;
 
+                                    void vscode.commands.executeCommand(
+                                        'workbench.action.terminal.scrollToBottom'
+                                    );
+
                                     if (editorBeforeRun) {
                                         void vscode.commands.executeCommand(
                                             'workbench.action.focusActiveEditorGroup'
@@ -1284,7 +1288,7 @@ function createPosixRunCommand(
     workingDirectory: string,
     outputFile: string
 ): string {
-    return 'clear; ' +
+    return `printf '\\033[2J\\033[3J\\033[H'; ` +
         `cd -- ${quotePosixShell(workingDirectory)}; ` +
         `dotnet ${quotePosixShell(outputFile)}`;
 }
