@@ -2,6 +2,12 @@
 
 All notable changes to the PascalABC.NET extension are documented in this file.
 
+## Unreleased
+
+### Documentation
+
+- Documented macOS support for the .NET 10 compiler, IntelliSense, and integrated terminal execution.
+
 ## 0.5.0 — Multitarget Branding and Transparency
 
 ### Changed

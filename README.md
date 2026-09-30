@@ -30,7 +30,7 @@ The name **Multitarget PascalABC.NET** reflects the two independent PascalABC.NE
 | Target | Best suited for | Program launch |
 | --- | --- | --- |
 | .NET Framework 4.7.2 | Windows; compatibility with the classic PascalABC.NET environment | runs the generated `.exe` directly |
-| .NET 10 | Windows and Linux; modern .NET applications and current platform capabilities | runs the generated `.exe` with `dotnet` |
+| .NET 10 | Windows, Linux, and macOS; modern .NET applications and current platform capabilities | runs the generated `.exe` with `dotnet` |
 
 Select the target from the **PascalABC.NET** item in the status bar or run **PascalABC.NET: Select Compiler Target** from the Command Palette. Each target has its own compiler assemblies and compatible precompiled standard units.
 
@@ -67,9 +67,9 @@ Compiler errors are displayed directly in the editor. `Ctrl+F9` compiles the cur
 
 ## Platform Support
 
-This preview supports Windows and Linux. The compiler runtime required for ordinary PascalABC.NET programs is bundled with the extension, so a separate PascalABC.NET installation is not required for the basic compile-and-run workflow.
+This preview supports Windows, Linux, and macOS. The compiler runtime required for ordinary PascalABC.NET programs is bundled with the extension, so a separate PascalABC.NET installation is not required for the basic compile-and-run workflow.
 
-On Windows, both the classic .NET Framework 4.7.2 target and the modern .NET 10 target are available. On Linux, the extension automatically uses .NET 10 and does not offer the Windows-only .NET Framework target. The .NET 10 runtime must be installed on the computer; both the compiler and generated programs are launched through `dotnet`.
+On Windows, both the classic .NET Framework 4.7.2 target and the modern .NET 10 target are available. On Linux and macOS, the extension automatically uses .NET 10 and does not offer the Windows-only .NET Framework target. The .NET 10 runtime must be installed on the computer; both the compiler and generated programs are launched through `dotnet`.
 
 Some optional modules depend on components normally installed with the full PascalABC.NET distribution. For example, `Graph3D` expects HelixToolkit and `NUnitABC` expects NUnit.
 

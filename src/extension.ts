@@ -5,6 +5,7 @@ import {
     spawn
 } from 'child_process';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import * as readline from 'readline';
 import {
@@ -1025,7 +1026,8 @@ async function performCompileActiveDocument(
                             )
                             : createPosixRunCommand(
                                 workingDirectory,
-                                outputFile
+                                outputFile,
+                                compilerProfile.command
                             );
 
                         const shellIntegration =
@@ -1135,6 +1137,52 @@ function isFileOnDisk(fileName: string): boolean {
     }
 }
 
+function resolveDotnetExecutable(): string {
+    const executableName = process.platform === 'win32'
+        ? 'dotnet.exe'
+        : 'dotnet';
+    const architecture = process.arch === 'ia32'
+        ? 'X86'
+        : process.arch.toUpperCase();
+    const architectureRoot = process.env[`DOTNET_ROOT_${architecture}`];
+    const configuredRoots = [
+        architectureRoot,
+        process.env.DOTNET_ROOT
+    ].filter((value): value is string => Boolean(value));
+    const candidates: Array<string | undefined> = [
+        process.env.DOTNET_HOST_PATH,
+        ...configuredRoots.map(root => path.join(root, executableName)),
+        path.join(os.homedir(), '.dotnet', executableName)
+    ];
+
+    if (process.platform === 'win32') {
+        candidates.push(
+            process.env.ProgramFiles
+                ? path.join(process.env.ProgramFiles, 'dotnet', executableName)
+                : undefined,
+            process.env['ProgramFiles(x86)']
+                ? path.join(
+                    process.env['ProgramFiles(x86)'],
+                    'dotnet',
+                    executableName
+                )
+                : undefined
+        );
+    } else {
+        candidates.push(
+            '/usr/bin/dotnet',
+            '/usr/local/bin/dotnet',
+            '/usr/share/dotnet/dotnet',
+            '/usr/local/share/dotnet/dotnet'
+        );
+    }
+
+    return candidates.find(
+        (candidate): candidate is string =>
+            candidate !== undefined && isFileOnDisk(candidate)
+    ) ?? 'dotnet';
+}
+
 async function getCompilerRuntimeError(
     profile: CompilerProfile
 ): Promise<string | undefined> {
@@ -1144,7 +1192,7 @@ async function getCompilerRuntimeError(
 
     const runtimeList = await new Promise<string | undefined>(resolve => {
         execFile(
-            'dotnet',
+            profile.command,
             ['--list-runtimes'],
             {
                 encoding: 'utf8',
@@ -1161,8 +1209,10 @@ async function getCompilerRuntimeError(
         return undefined;
     }
 
-    return '.NET 10 runtime was not found. Install Microsoft.NETCore.App 10.x ' +
-        'or select .NET Framework 4.7.2.';
+    return process.platform === 'win32'
+        ? '.NET 10 runtime was not found. Install Microsoft.NETCore.App 10.x ' +
+            'or select .NET Framework 4.7.2.'
+        : '.NET 10 runtime was not found. Install Microsoft.NETCore.App 10.x.';
 }
 
 async function waitForInitialShellPrompt(
@@ -1272,7 +1322,7 @@ function createPowerShellRunCommand(
 ): string {
     const escapedOutputFile = escapePowerShellDoubleQuoted(outputFile);
     const runCommand = profile.target === 'net10'
-        ? `dotnet "${escapedOutputFile}"`
+        ? `& "${escapePowerShellDoubleQuoted(profile.command)}" "${escapedOutputFile}"`
         : `& "${escapedOutputFile}"`;
 
     return 'Clear-Host; ' +
@@ -1286,11 +1336,12 @@ function quotePosixShell(value: string): string {
 
 function createPosixRunCommand(
     workingDirectory: string,
-    outputFile: string
+    outputFile: string,
+    dotnetCommand: string
 ): string {
     return `printf '\\033[2J\\033[3J\\033[H'; ` +
         `cd -- ${quotePosixShell(workingDirectory)}; ` +
-        `dotnet ${quotePosixShell(outputFile)}`;
+        `${quotePosixShell(dotnetCommand)} ${quotePosixShell(outputFile)}`;
 }
 
 function getCompilerTarget(): CompilerTarget {
@@ -1314,7 +1365,7 @@ function updateCompilerStatus(status: vscode.StatusBarItem): void {
     status.text = `$(tools) PascalABC.NET: ${getCompilerTargetLabel()}`;
     status.tooltip = process.platform === 'win32'
         ? 'Select PascalABC.NET compiler target'
-        : 'PascalABC.NET uses .NET 10 on Linux';
+        : 'PascalABC.NET uses .NET 10 on Linux and macOS';
     if (vscode.window.activeTextEditor?.document.languageId === 'pascalabc') {
         status.show();
     } else {
@@ -1364,7 +1415,7 @@ function resolveCompilerProfile(
         target,
         label: '.NET 10',
         runtimeDirectory,
-        command: 'dotnet',
+        command: resolveDotnetExecutable(),
         args: [controllerPath],
         requiredComponents: modernRequiredCompilerComponents
     };
@@ -1470,13 +1521,15 @@ function startLanguageServer(context: vscode.ExtensionContext): void {
         return;
     }
 
+    const dotnetCommand = resolveDotnetExecutable();
+
     output.info(
         `Starting Language Server on ${process.platform}/${process.arch}: ` +
-        `dotnet ${serverPath}`
+        `${dotnetCommand} ${serverPath}`
     );
 
     const serverOptions: ServerOptions = {
-        command: 'dotnet',
+        command: dotnetCommand,
         args: [
             serverPath,
             '--stdio',
