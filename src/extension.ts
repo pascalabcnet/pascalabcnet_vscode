@@ -896,7 +896,7 @@ async function performCompileActiveDocument(
                 }
             }
 
-            diagnostics.delete(document.uri);
+            diagnostics.clear();
 
             const compilerProfile = resolveCompilerProfile(context);
 
