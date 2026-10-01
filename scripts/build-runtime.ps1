@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
-    [string]$PascalABCSourcePath = ''
+    [string]$PascalABCSourcePath = '',
+    [string]$ToolingSourcePath = ''
 )
 
 Set-StrictMode -Version Latest
@@ -9,16 +10,19 @@ $ErrorActionPreference = 'Stop'
 $repositoryRoot = [System.IO.Path]::GetFullPath(
     (Join-Path $PSScriptRoot '..')
 )
-$usesPinnedPascalABCSources = [string]::IsNullOrWhiteSpace(
-    $PascalABCSourcePath
-)
+$usesPinnedToolingSources = [string]::IsNullOrWhiteSpace($ToolingSourcePath)
+if ($usesPinnedToolingSources) {
+    $ToolingSourcePath = Join-Path $repositoryRoot `
+        'externals\pascalabcnet-tooling'
+}
+$ToolingSourcePath = [System.IO.Path]::GetFullPath($ToolingSourcePath)
+$usesPinnedPascalABCSources = [string]::IsNullOrWhiteSpace($PascalABCSourcePath)
 if ($usesPinnedPascalABCSources) {
-    $PascalABCSourcePath = Join-Path $repositoryRoot `
-        'externals\pascalabcnet-tooling\pascalabcnet'
+    $PascalABCSourcePath = Join-Path $ToolingSourcePath 'pascalabcnet'
 }
 $PascalABCSourcePath = [System.IO.Path]::GetFullPath($PascalABCSourcePath)
 
-if ($usesPinnedPascalABCSources -and
+if ($usesPinnedToolingSources -and $usesPinnedPascalABCSources -and
     -not (Test-Path -LiteralPath `
         (Join-Path $PascalABCSourcePath 'PascalABCNET.sln') `
         -PathType Leaf)) {
@@ -37,12 +41,8 @@ if ($usesPinnedPascalABCSources -and
 
 $pascalABCRuntimeRoot = Join-Path $PascalABCSourcePath 'bin'
 $modernPascalABCRuntimeRoot = Join-Path $PascalABCSourcePath 'bin-net10'
-$compilerHostRoot = Join-Path $repositoryRoot 'compiler-host'
-$controllerProjectPath = Join-Path $compilerHostRoot `
-    'Controller\PABCCompilerController.csproj'
-$workerProjectPath = Join-Path $compilerHostRoot `
-    'Worker\ZMQServerPas.csproj'
-$dependencyRoot = Join-Path $compilerHostRoot 'dependencies\netmq'
+$compilerHostBuildScript = Join-Path $ToolingSourcePath `
+    'scripts\build-compiler-host.ps1'
 $buildRoot = Join-Path $repositoryRoot '.build'
 $hostBuildRoot = Join-Path $buildRoot 'compiler-host'
 $nextBinRoot = Join-Path $buildRoot 'bin-next'
@@ -99,8 +99,10 @@ $modernCompilerDlls = @($compilerCoreDlls)
 
 $hostDependencies = @(
     'AsyncIO.dll',
+    'Microsoft.Bcl.AsyncInterfaces.dll',
     'NetMQ.dll',
     'System.Buffers.dll',
+    'System.Collections.Immutable.dll',
     'System.Memory.dll',
     'System.Numerics.Vectors.dll',
     'System.Runtime.CompilerServices.Unsafe.dll',
@@ -393,41 +395,6 @@ function Invoke-ModernPascalABCBuild {
     }
 }
 
-function Invoke-HostBuild {
-    param(
-        [string]$ProjectPath,
-        [string]$TargetFramework,
-        [string]$OutputRoot,
-        [string]$AssemblyName
-    )
-
-    Write-Host "Compiling $AssemblyName for $TargetFramework..."
-    & dotnet build $ProjectPath `
-        -c Release `
-        -f $TargetFramework `
-        --disable-build-servers `
-        -m:1 `
-        -p:BuildInParallel=false `
-        -p:SatelliteResourceLanguages=ru `
-        --nologo `
-        --output $OutputRoot
-
-    if ($LASTEXITCODE -ne 0) {
-        throw "$AssemblyName build failed with exit code $LASTEXITCODE."
-    }
-
-    if ($TargetFramework -eq 'net472') {
-        Assert-FileExists (Join-Path $OutputRoot ($AssemblyName + '.exe'))
-        Assert-FileExists (Join-Path $OutputRoot ($AssemblyName + '.exe.config'))
-    }
-    else {
-        Assert-FileExists (Join-Path $OutputRoot ($AssemblyName + '.dll'))
-        Assert-FileExists (Join-Path $OutputRoot ($AssemblyName + '.deps.json'))
-        Assert-FileExists `
-            (Join-Path $OutputRoot ($AssemblyName + '.runtimeconfig.json'))
-    }
-}
-
 function Read-ControllerResponse {
     param(
         [System.Diagnostics.Process]$Process,
@@ -673,17 +640,14 @@ function Assert-RuntimeLayout {
 Write-Host "PascalABC.NET source: $PascalABCSourcePath"
 Assert-DirectoryExists $PascalABCSourcePath
 Assert-FileExists (Join-Path $PascalABCSourcePath 'PascalABCNET.sln')
-Assert-FileExists $controllerProjectPath
-Assert-FileExists (Join-Path $compilerHostRoot 'Controller\Program.cs')
-Assert-FileExists $workerProjectPath
-Assert-FileExists (Join-Path $compilerHostRoot 'Worker\Program.cs')
+Assert-FileExists $compilerHostBuildScript
+Assert-FileExists (Join-Path $ToolingSourcePath `
+    'PascalABCNet.CompilerController\PascalABCNet.CompilerController.csproj')
+Assert-FileExists (Join-Path $ToolingSourcePath `
+    'PascalABCNet.CompilerWorker\PascalABCNet.CompilerWorker.csproj')
 Assert-DirectoryExists (Join-Path $pascalABCRuntimeRoot 'Lib')
 Assert-DirectoryExists (Join-Path $pascalABCRuntimeRoot 'Lng\Eng')
 Assert-DirectoryExists (Join-Path $pascalABCRuntimeRoot 'Lng\Rus')
-foreach ($dependencyName in $hostDependencies) {
-    Assert-FileExists (Join-Path $dependencyRoot $dependencyName)
-}
-
 Assert-OutputRuntimeNotInUse
 Invoke-PascalABCBuild
 Invoke-StandardModulesBuild
@@ -709,41 +673,28 @@ $modernRuntimeRoot = Join-Path $nextBinRoot 'net10'
 New-Item -ItemType Directory -Path $legacyRuntimeRoot | Out-Null
 New-Item -ItemType Directory -Path $modernRuntimeRoot | Out-Null
 
-$legacyControllerBuildRoot = Join-Path $hostBuildRoot 'Controller-net472'
-$legacyWorkerBuildRoot = Join-Path $hostBuildRoot 'Worker-net472'
-$modernControllerBuildRoot = Join-Path $hostBuildRoot 'Controller-net10'
-$modernWorkerBuildRoot = Join-Path $hostBuildRoot 'Worker-net10'
+$legacyHostBuildRoot = Join-Path $hostBuildRoot 'net-framework'
+$modernHostBuildRoot = Join-Path $hostBuildRoot 'net10'
 
-Invoke-HostBuild $controllerProjectPath 'net472' `
-    $legacyControllerBuildRoot 'PABCCompilerController'
-Invoke-HostBuild $workerProjectPath 'net472' `
-    $legacyWorkerBuildRoot 'ZMQServerPas'
-Invoke-HostBuild $controllerProjectPath 'net10.0' `
-    $modernControllerBuildRoot 'PABCCompilerController'
-Invoke-HostBuild $workerProjectPath 'net10.0' `
-    $modernWorkerBuildRoot 'ZMQServerPas'
+Write-Host 'Building compiler host from PascalABC.NET Tooling...'
+& $compilerHostBuildScript -OutputRoot $hostBuildRoot `
+    -PascalABCSourcePath $PascalABCSourcePath -Target all
+if ($LASTEXITCODE -ne 0) {
+    throw "Tooling compiler-host build failed with exit code $LASTEXITCODE."
+}
 
 foreach ($dllName in $legacyCompilerDlls) {
     Copy-RequiredFile (Join-Path $pascalABCRuntimeRoot $dllName) `
         $legacyRuntimeRoot
 }
-foreach ($dependencyName in $hostDependencies) {
-    Copy-RequiredFile (Join-Path $dependencyRoot $dependencyName) `
-        $legacyRuntimeRoot
-}
-
 foreach ($dllFile in Get-ChildItem -LiteralPath $modernPascalABCRuntimeRoot `
     -File -Filter '*.dll') {
     Copy-Item -LiteralPath $dllFile.FullName -Destination $modernRuntimeRoot
 }
 
-Copy-HostOutput $legacyControllerBuildRoot $legacyRuntimeRoot `
-    @('.exe', '.exe.config')
-Copy-HostOutput $legacyWorkerBuildRoot $legacyRuntimeRoot `
-    @('.exe', '.exe.config')
-Copy-HostOutput $modernControllerBuildRoot $modernRuntimeRoot `
-    @('.dll', '.deps.json', '.runtimeconfig.json') -PreserveExisting
-Copy-HostOutput $modernWorkerBuildRoot $modernRuntimeRoot `
+Copy-HostOutput $legacyHostBuildRoot $legacyRuntimeRoot `
+    @('.dll', '.exe', '.exe.config') -PreserveExisting
+Copy-HostOutput $modernHostBuildRoot $modernRuntimeRoot `
     @('.dll', '.deps.json', '.runtimeconfig.json') -PreserveExisting
 
 # NetMQ carries NaCl.Net for optional CURVE encryption. The extension uses only

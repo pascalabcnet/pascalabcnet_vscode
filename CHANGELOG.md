@@ -4,6 +4,10 @@ All notable changes to the PascalABC.NET extension are documented in this file.
 
 ## Unreleased
 
+### Changed
+
+- The compiler controller and worker are now built from the pinned PascalABC.NET Tooling submodule instead of duplicated extension sources.
+
 ### Documentation
 
 - Documented macOS support for the .NET 10 compiler, IntelliSense, and integrated terminal execution.

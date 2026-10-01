@@ -1,5 +1,7 @@
 [CmdletBinding()]
-param()
+param(
+    [string]$ToolingSourcePath = ''
+)
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -7,7 +9,12 @@ $ErrorActionPreference = 'Stop'
 $repositoryRoot = [System.IO.Path]::GetFullPath(
     (Join-Path $PSScriptRoot '..')
 )
-$toolingRoot = Join-Path $repositoryRoot 'externals\pascalabcnet-tooling'
+$usesPinnedToolingSources = [string]::IsNullOrWhiteSpace($ToolingSourcePath)
+$toolingRoot = $ToolingSourcePath
+if ($usesPinnedToolingSources) {
+    $toolingRoot = Join-Path $repositoryRoot 'externals\pascalabcnet-tooling'
+}
+$toolingRoot = [System.IO.Path]::GetFullPath($toolingRoot)
 $projectPath = Join-Path $toolingRoot `
     'PascalABCNet.LanguageServer\PascalABCNet.LanguageServer.csproj'
 $nestedCompilerPath = Join-Path $toolingRoot `
@@ -46,8 +53,9 @@ function Get-Sha256Hash {
     }
 }
 
-if (-not (Test-Path -LiteralPath $projectPath -PathType Leaf) -or
-    -not (Test-Path -LiteralPath $nestedCompilerPath -PathType Leaf)) {
+if ($usesPinnedToolingSources -and
+    (-not (Test-Path -LiteralPath $projectPath -PathType Leaf) -or
+    -not (Test-Path -LiteralPath $nestedCompilerPath -PathType Leaf))) {
     Write-Host '=== Initializing tooling submodules ==='
     Push-Location $repositoryRoot
     try {

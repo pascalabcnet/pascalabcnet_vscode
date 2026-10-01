@@ -5,7 +5,6 @@
 .gitignore
 .gitattributes
 src/**
-compiler-host/**
 external/**
 externals/**
 scripts/**

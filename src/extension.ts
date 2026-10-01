@@ -42,6 +42,7 @@ interface CompilerTargetQuickPickItem extends vscode.QuickPickItem {
 const legacyRequiredCompilerComponents = [
     'ZMQServerPas.exe',
     'AsyncIO.dll',
+    'Microsoft.Bcl.AsyncInterfaces.dll',
     'Compiler.dll',
     'CompilerTools.dll',
     'Errors.dll',
@@ -61,6 +62,7 @@ const legacyRequiredCompilerComponents = [
     'SyntaxTreeConverters.dll',
     'SyntaxVisitors.dll',
     'System.Buffers.dll',
+    'System.Collections.Immutable.dll',
     'System.Memory.dll',
     'System.Numerics.Vectors.dll',
     'System.Runtime.CompilerServices.Unsafe.dll',

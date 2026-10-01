@@ -44,7 +44,7 @@ The TypeScript extension starts these components as child processes when needed:
 - `PABCCompilerController.exe` is used for the .NET Framework target; its .NET 10 counterpart is `PABCCompilerController.dll`, launched through `dotnet`. The controller accepts JSON Lines requests from the extension and manages compiler-worker lifetime.
 - `ZMQServerPas.exe` or `ZMQServerPas.dll` is the compiler worker. It loads the selected PascalABC.NET compiler runtime and performs compilation outside the VS Code extension host.
 
-The controller selects an available loopback TCP port and communicates with its worker through local NetMQ request/reply messaging. The required runtime components are bundled with the extension.
+The controller and worker are maintained in the shared PascalABC.NET Tooling repository. During packaging the extension builds them from its pinned Tooling submodule. The controller selects an available loopback TCP port and communicates with its worker through local NetMQ request/reply messaging. The required runtime components are bundled with the extension.
 
 ## Runtime Behavior
 
@@ -77,13 +77,13 @@ Some optional modules depend on components normally installed with the full Pasc
 
 Semantic language features are provided by the separate [PascalABC.NET Tooling](https://github.com/pascalabcnet/pascalabcnet-tooling) backend. The extension starts its portable framework-dependent .NET 10 language server through `dotnet` as an independent process and communicates with it through the standard Language Server Protocol over stdio.
 
-The language server owns document synchronization and PascalABC.NET semantic analysis, including global and member completion. The existing compiler controller remains an independent process and continues to handle explicit Compile and Run commands.
+The language server owns document synchronization and PascalABC.NET semantic analysis, including global and member completion. The Tooling compiler controller remains an independent process and continues to handle explicit Compile and Run commands.
 
 ## Source Code
 
 The complete extension source is available at [github.com/pascalabcnet/pascalabcnet_vscode](https://github.com/pascalabcnet/pascalabcnet_vscode). Issues can be reported through the repository's [issue tracker](https://github.com/pascalabcnet/pascalabcnet_vscode/issues).
 
-The semantic backend is maintained in the public [PascalABC.NET Tooling](https://github.com/pascalabcnet/pascalabcnet-tooling) repository.
+The semantic backend, compiler controller, and compiler worker are maintained in the public [PascalABC.NET Tooling](https://github.com/pascalabcnet/pascalabcnet-tooling) repository.
 
 ## Building from Source
 
