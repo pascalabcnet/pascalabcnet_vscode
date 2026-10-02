@@ -52,6 +52,8 @@ $compilerPath = Join-Path $pascalABCRuntimeRoot 'pabcnetcclear.exe'
 $standardModulesCompilerPath = Join-Path $pascalABCRuntimeRoot 'pabcnetc.exe'
 $modernCompilerPath = Join-Path $modernPascalABCRuntimeRoot `
     'pabcnetcclear.exe'
+$modernCodeCompletionProject = Join-Path $PascalABCSourcePath `
+    'CodeCompletion\CodeCompletion.csproj'
 
 $excludedStandardModules = @(
     'ABCHouse',
@@ -352,6 +354,20 @@ function Invoke-ModernPascalABCBuild {
         throw "PascalABC.NET net10 build failed with exit code $LASTEXITCODE."
     }
 
+    Write-Host 'Building PascalABC.NET CodeCompletion for .NET 10...'
+    & dotnet build $modernCodeCompletionProject `
+        -c Release `
+        -f net10.0 `
+        --no-incremental `
+        --disable-build-servers `
+        -m:1 `
+        -p:BuildInParallel=false `
+        --nologo `
+        -v:minimal
+    if ($LASTEXITCODE -ne 0) {
+        throw "PascalABC.NET CodeCompletion net10 build failed with exit code $LASTEXITCODE."
+    }
+
     Assert-FileExists $modernCompilerPath
     Assert-DirectoryExists $libraryRoot
 
@@ -630,10 +646,11 @@ function Assert-RuntimeLayout {
 Write-Host "PascalABC.NET source: $PascalABCSourcePath"
 Assert-DirectoryExists $PascalABCSourcePath
 Assert-FileExists (Join-Path $PascalABCSourcePath 'PascalABCNET.sln')
+Assert-FileExists $modernCodeCompletionProject
 Assert-FileExists $compilerHostBuildScript
-Assert-FileExists (Join-Path $ToolingSourcePath `
+Assert-FileExists (Join-Path $PascalABCSourcePath `
     'PascalABCNet.CompilerController\PascalABCNet.CompilerController.csproj')
-Assert-FileExists (Join-Path $ToolingSourcePath `
+Assert-FileExists (Join-Path $PascalABCSourcePath `
     'PascalABCNet.CompilerWorker\PascalABCNet.CompilerWorker.csproj')
 Assert-DirectoryExists (Join-Path $pascalABCRuntimeRoot 'Lib')
 Assert-DirectoryExists (Join-Path $pascalABCRuntimeRoot 'Lng\Eng')
