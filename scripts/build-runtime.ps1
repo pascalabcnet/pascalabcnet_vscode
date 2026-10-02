@@ -97,17 +97,7 @@ $compilerCoreDlls = @(
 $legacyCompilerDlls = @($compilerCoreDlls) + @('System.ValueTuple.dll')
 $modernCompilerDlls = @($compilerCoreDlls)
 
-$hostDependencies = @(
-    'AsyncIO.dll',
-    'Microsoft.Bcl.AsyncInterfaces.dll',
-    'NetMQ.dll',
-    'System.Buffers.dll',
-    'System.Collections.Immutable.dll',
-    'System.Memory.dll',
-    'System.Numerics.Vectors.dll',
-    'System.Runtime.CompilerServices.Unsafe.dll',
-    'System.Threading.Tasks.Extensions.dll'
-)
+$hostDependencies = @()
 
 function Assert-FileExists {
     param([string]$Path)
@@ -696,14 +686,6 @@ Copy-HostOutput $legacyHostBuildRoot $legacyRuntimeRoot `
     @('.dll', '.exe', '.exe.config') -PreserveExisting
 Copy-HostOutput $modernHostBuildRoot $modernRuntimeRoot `
     @('.dll', '.deps.json', '.runtimeconfig.json') -PreserveExisting
-
-# NetMQ carries NaCl.Net for optional CURVE encryption. The extension uses only
-# unencrypted loopback IPC, so do not ship this unused binary in the .NET 10
-# runtime. Besides reducing the package, this avoids antivirus false positives.
-$modernNaClPath = Join-Path $modernRuntimeRoot 'NaCl.dll'
-if (Test-Path -LiteralPath $modernNaClPath -PathType Leaf) {
-    Remove-Item -LiteralPath $modernNaClPath -Force
-}
 
 $legacyLibRoot = Join-Path $legacyRuntimeRoot 'Lib'
 Copy-PascalLibraryArtifacts (Join-Path $pascalABCRuntimeRoot 'Lib') `

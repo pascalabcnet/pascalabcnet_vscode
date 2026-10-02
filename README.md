@@ -42,9 +42,9 @@ The TypeScript extension starts these components as child processes when needed:
 
 - `PascalABCNet.LanguageServer.dll` runs through `dotnet` and provides semantic IntelliSense over the Language Server Protocol using stdio.
 - `PABCCompilerController.exe` is used for the .NET Framework target; its .NET 10 counterpart is `PABCCompilerController.dll`, launched through `dotnet`. The controller accepts JSON Lines requests from the extension and manages compiler-worker lifetime.
-- `ZMQServerPas.exe` or `ZMQServerPas.dll` is the compiler worker. It loads the selected PascalABC.NET compiler runtime and performs compilation outside the VS Code extension host.
+- `ZMQServerPas.exe` or `ZMQServerPas.dll` is the compiler worker (the historical assembly name is retained for compatibility). It loads the selected PascalABC.NET compiler runtime and performs compilation outside the VS Code extension host.
 
-The controller and worker are maintained in the shared PascalABC.NET Tooling repository. During packaging the extension builds them from its pinned Tooling submodule. The controller selects an available loopback TCP port and communicates with its worker through local NetMQ request/reply messaging. The required runtime components are bundled with the extension.
+The controller and worker are maintained in the shared PascalABC.NET Tooling repository. During packaging the extension builds them from its pinned Tooling submodule. The controller communicates with its worker through redirected standard input/output using JSON Lines. The required runtime components are bundled with the extension; no network transport is used between the controller and worker.
 
 ## Runtime Behavior
 
@@ -137,7 +137,7 @@ scripts\build-server.cmd
 scripts\build-vsix.cmd
 ```
 
-The package filename is derived from the extension name and version, for example `multitarget-pascalabc-net-0.5.1.vsix`. Generated files under `bin/`, `out/`, and `.build/` are intentionally not committed; the scripts reconstruct them from the pinned public source revisions.
+The package filename is derived from the extension name and version, for example `multitarget-pascalabc-net-0.5.2.vsix`. Generated files under `bin/`, `out/`, and `.build/` are intentionally not committed; the scripts reconstruct them from the pinned public source revisions.
 
 ## Updating the Tooling Backend
 
@@ -155,7 +155,7 @@ Do not update `externals/pascalabcnet-tooling/pascalabcnet` directly from this r
 To install it locally:
 
 ```powershell
-code --install-extension .\multitarget-pascalabc-net-0.5.1.vsix
+code --install-extension .\multitarget-pascalabc-net-0.5.2.vsix
 ```
 
 ## Commands
