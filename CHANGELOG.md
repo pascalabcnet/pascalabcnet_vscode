@@ -9,6 +9,7 @@ All notable changes to the PascalABC.NET extension are documented in this file.
 - The compiler controller and worker are now built from the pinned PascalABC.NET Tooling submodule instead of duplicated extension sources.
 - Replaced the controller-to-worker NetMQ transport with JSON Lines over redirected standard input/output.
 - Removed the bundled NetMQ, AsyncIO, and NaCl transport dependencies.
+- Updated the packaged compiler worker name to `PABCCompilerWorker`.
 
 ### Documentation
 

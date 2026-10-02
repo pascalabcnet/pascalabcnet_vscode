@@ -155,7 +155,7 @@ function Assert-OutputRuntimeNotInUse {
 
     $binPrefix = [System.IO.Path]::GetFullPath($outputBinRoot).TrimEnd('\') + '\'
     $runtimeProcesses = @(Get-Process `
-        -Name 'PABCCompilerController', 'ZMQServerPas' `
+        -Name 'PABCCompilerController', 'PABCCompilerWorker' `
         -ErrorAction SilentlyContinue |
         Where-Object {
             $_.Path -and
@@ -570,13 +570,13 @@ function Assert-RuntimeLayout {
         $requiredRootFiles = @($legacyCompilerDlls) + @($hostDependencies) + @(
             'PABCCompilerController.exe'
             'PABCCompilerController.exe.config'
-            'ZMQServerPas.exe'
-            'ZMQServerPas.exe.config'
+            'PABCCompilerWorker.exe'
+            'PABCCompilerWorker.exe.config'
         )
         $allowedRootExtensions = @('.dll', '.exe', '.config')
         $expectedExecutables = @(
             'PABCCompilerController.exe',
-            'ZMQServerPas.exe'
+            'PABCCompilerWorker.exe'
         )
     }
     else {
@@ -584,9 +584,9 @@ function Assert-RuntimeLayout {
             'PABCCompilerController.dll'
             'PABCCompilerController.deps.json'
             'PABCCompilerController.runtimeconfig.json'
-            'ZMQServerPas.dll'
-            'ZMQServerPas.deps.json'
-            'ZMQServerPas.runtimeconfig.json'
+            'PABCCompilerWorker.dll'
+            'PABCCompilerWorker.deps.json'
+            'PABCCompilerWorker.runtimeconfig.json'
         )
         $allowedRootExtensions = @('.dll', '.json')
         $expectedExecutables = @()
@@ -658,15 +658,6 @@ Assert-DirectoryExists (Join-Path $pascalABCRuntimeRoot 'Lng\Rus')
 Assert-OutputRuntimeNotInUse
 Invoke-PascalABCBuild
 Invoke-StandardModulesBuild
-Invoke-ModernPascalABCBuild
-
-Assert-FileExists $compilerPath
-foreach ($dllName in $legacyCompilerDlls) {
-    Assert-FileExists (Join-Path $pascalABCRuntimeRoot $dllName)
-}
-foreach ($dllName in $modernCompilerDlls) {
-    Assert-FileExists (Join-Path $modernPascalABCRuntimeRoot $dllName)
-}
 
 New-Item -ItemType Directory -Path $buildRoot -Force | Out-Null
 Remove-BuildDirectory $hostBuildRoot
@@ -688,6 +679,18 @@ Write-Host 'Building compiler host from PascalABC.NET Tooling...'
     -PascalABCSourcePath $PascalABCSourcePath -Target all
 if ($LASTEXITCODE -ne 0) {
     throw "Tooling compiler-host build failed with exit code $LASTEXITCODE."
+}
+
+# The compiler-host build can recreate bin-net10. Build the final modern
+# compiler and PCU set afterwards so that the packaged Lib is complete.
+Invoke-ModernPascalABCBuild
+
+Assert-FileExists $compilerPath
+foreach ($dllName in $legacyCompilerDlls) {
+    Assert-FileExists (Join-Path $pascalABCRuntimeRoot $dllName)
+}
+foreach ($dllName in $modernCompilerDlls) {
+    Assert-FileExists (Join-Path $modernPascalABCRuntimeRoot $dllName)
 }
 
 foreach ($dllName in $legacyCompilerDlls) {

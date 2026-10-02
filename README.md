@@ -42,7 +42,7 @@ The TypeScript extension starts these components as child processes when needed:
 
 - `PascalABCNet.LanguageServer.dll` runs through `dotnet` and provides semantic IntelliSense over the Language Server Protocol using stdio.
 - `PABCCompilerController.exe` is used for the .NET Framework target; its .NET 10 counterpart is `PABCCompilerController.dll`, launched through `dotnet`. The controller accepts JSON Lines requests from the extension and manages compiler-worker lifetime.
-- `ZMQServerPas.exe` or `ZMQServerPas.dll` is the compiler worker (the historical assembly name is retained for compatibility). It loads the selected PascalABC.NET compiler runtime and performs compilation outside the VS Code extension host.
+- `PABCCompilerWorker.exe` or `PABCCompilerWorker.dll` is the compiler worker. It loads the selected PascalABC.NET compiler runtime and performs compilation outside the VS Code extension host.
 
 The controller and worker are maintained in the shared PascalABC.NET Tooling repository. During packaging the extension builds them from its pinned Tooling submodule. The controller communicates with its worker through redirected standard input/output using JSON Lines. The required runtime components are bundled with the extension; no network transport is used between the controller and worker.
 

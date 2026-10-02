@@ -40,7 +40,7 @@ interface CompilerTargetQuickPickItem extends vscode.QuickPickItem {
 }
 
 const legacyRequiredCompilerComponents = [
-    'ZMQServerPas.exe',
+    'PABCCompilerWorker.exe',
     'Compiler.dll',
     'CompilerTools.dll',
     'Errors.dll',
@@ -68,9 +68,9 @@ const modernRequiredCompilerComponents = [
     'PABCCompilerController.dll',
     'PABCCompilerController.deps.json',
     'PABCCompilerController.runtimeconfig.json',
-    'ZMQServerPas.dll',
-    'ZMQServerPas.deps.json',
-    'ZMQServerPas.runtimeconfig.json',
+    'PABCCompilerWorker.dll',
+    'PABCCompilerWorker.deps.json',
+    'PABCCompilerWorker.runtimeconfig.json',
     'Compiler.dll',
     'CompilerTools.dll',
     'Errors.dll',
