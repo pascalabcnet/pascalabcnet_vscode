@@ -816,6 +816,10 @@ async function compileActiveDocument(
     compilationInProgress = true;
 
     try {
+        if (runAfterSuccess) {
+            await stopActiveRun();
+        }
+
         await performCompileActiveDocument(
             context,
             output,
@@ -833,6 +837,46 @@ async function compileActiveDocument(
 function invalidateActiveCompilation(): void {
     compilationGeneration++;
     compilationInProgress = false;
+}
+
+async function stopActiveRun(): Promise<void> {
+    const terminal = runTerminal;
+
+    if (!activeRunExecution || !terminal) {
+        return;
+    }
+
+    activeRunExecution = undefined;
+    runTerminal = undefined;
+
+    await new Promise<void>(resolve => {
+        let completed = false;
+        let timeout: NodeJS.Timeout | undefined;
+
+        const complete = (): void => {
+            if (completed) {
+                return;
+            }
+
+            completed = true;
+            subscription.dispose();
+
+            if (timeout) {
+                clearTimeout(timeout);
+            }
+
+            resolve();
+        };
+
+        const subscription = vscode.window.onDidCloseTerminal(closedTerminal => {
+            if (closedTerminal === terminal) {
+                complete();
+            }
+        });
+
+        timeout = setTimeout(complete, 1500);
+        terminal.dispose();
+    });
 }
 
 async function performCompileActiveDocument(
