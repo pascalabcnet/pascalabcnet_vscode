@@ -1,3 +1,4 @@
-[submodule "externals/pascalabcnet-tooling"]
-	path = externals/pascalabcnet-tooling
-	url = https://github.com/pascalabcnet/pascalabcnet-tooling.git
+
+[submodule "externals/pascalabcnet"]
+	path = externals/pascalabcnet
+	url = https://github.com/pascalabcnet/pascalabcnet.git

@@ -7,15 +7,21 @@ param(
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
-if ([string]::IsNullOrWhiteSpace($Net10RuntimePath)) {
-    throw 'Provide -Net10RuntimePath (or PABC_NET10_RUNTIME_PATH) pointing to a prepared unified PascalABC.NET kit.'
-}
 
 $repositoryRoot = [System.IO.Path]::GetFullPath(
     (Join-Path $PSScriptRoot '..')
 )
 if ([string]::IsNullOrWhiteSpace($PascalABCSourcePath)) {
-    throw 'Provide -PascalABCSourcePath (or PABC_SOURCE_PATH) pointing to the main PascalABC.NET checkout.'
+    $PascalABCSourcePath = Join-Path $repositoryRoot 'externals\pascalabcnet'
+    if (-not (Test-Path -LiteralPath (Join-Path $PascalABCSourcePath 'Net10Runtime.slnx'))) {
+        & git -C $repositoryRoot submodule update --init -- externals/pascalabcnet
+        if ($LASTEXITCODE -ne 0) { throw 'Could not initialize the pinned PascalABC.NET submodule.' }
+    }
+    $pinned = ((& git -C $repositoryRoot ls-files --stage -- externals/pascalabcnet) -split '\s+')[1]
+    $actual = & git -C $PascalABCSourcePath rev-parse HEAD
+    if ($LASTEXITCODE -ne 0 -or $pinned -ne $actual) { throw 'PascalABC.NET checkout does not match the pinned submodule commit.' }
+    & git -C $PascalABCSourcePath diff --quiet HEAD --
+    if ($LASTEXITCODE -ne 0) { throw 'Pinned PascalABC.NET sources have local changes. Use an explicit source override for development.' }
 }
 $PascalABCSourcePath = [System.IO.Path]::GetFullPath($PascalABCSourcePath)
 
@@ -71,7 +77,7 @@ $compilerCoreDlls = @(
     'TreeConverter.dll'
 )
 
-$legacyCompilerDlls = @($compilerCoreDlls) + @('System.ValueTuple.dll')
+$legacyCompilerDlls = @($compilerCoreDlls)
 $modernCompilerDlls = @($compilerCoreDlls)
 
 $hostDependencies = @()
@@ -560,6 +566,14 @@ Assert-DirectoryExists (Join-Path $pascalABCRuntimeRoot 'Lib')
 Assert-DirectoryExists (Join-Path $pascalABCRuntimeRoot 'Lng\Eng')
 Assert-DirectoryExists (Join-Path $pascalABCRuntimeRoot 'Lng\Rus')
 Assert-OutputRuntimeNotInUse
+
+if ([string]::IsNullOrWhiteSpace($Net10RuntimePath)) {
+    # Both targets use this exact checkout. Never consume an older bin-net10
+    # left over from a previous submodule revision.
+    & (Join-Path $PascalABCSourcePath 'scripts\build-net10-runtime.ps1') -Configuration Release
+    & (Join-Path $PascalABCSourcePath 'scripts\rebuild-net10-standard-units.ps1') -Configuration Release -SkipBuild
+    $Net10RuntimePath = Join-Path $PascalABCSourcePath 'bin-net10'
+}
 
 New-Item -ItemType Directory -Path $buildRoot -Force | Out-Null
 Remove-BuildDirectory $hostBuildRoot

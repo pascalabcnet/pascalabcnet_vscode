@@ -6,6 +6,7 @@ All notable changes to the PascalABC.NET extension are documented in this file.
 
 ### Changed
 
+- Replaced the unused Tooling/transitive compiler chain with one direct PascalABC.NET submodule shared by both targets. Default builds prepare .NET 10 and Framework from the pinned sources; external source/kit paths remain development overrides.
 - Framework compiler, standard units and controller/worker now build directly from a supplied main PascalABC.NET checkout; neither target uses Tooling in its packaging chain.
 - Added NuGet package search, version selection, editable `$package` directives, explicit language-server restore, progress, cancellation and a restore-required status item.
 - Enabled navigation from the unified language server, including read-only Pascal metadata documents for CLR symbols. Source definition and implementation use the standard VS Code commands.

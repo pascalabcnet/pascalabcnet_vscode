@@ -118,7 +118,7 @@ the build-script parameter described below; it does not read VS Code settings.
 
 The complete extension source is available at [github.com/pascalabcnet/pascalabcnet_vscode](https://github.com/pascalabcnet/pascalabcnet_vscode). Issues can be reported through the repository's [issue tracker](https://github.com/pascalabcnet/pascalabcnet_vscode/issues).
 
-Both backends are maintained in the public [PascalABC.NET](https://github.com/pascalabcnet/pascalabcnet) repository. The old Tooling submodule is no longer used by the build scripts.
+Both backends are maintained in the public [PascalABC.NET](https://github.com/pascalabcnet/pascalabcnet) repository, pinned once as the direct `externals/pascalabcnet` submodule. Framework and .NET 10 use that same checkout by default. Tooling is not involved.
 
 ## Building from Source
 
@@ -127,11 +127,20 @@ The complete Windows packaging workflow requires Git, Node.js with npm, PowerShe
 Clone the extension repository:
 
 ```powershell
-git clone https://github.com/pascalabcnet/pascalabcnet_vscode.git
+git clone --recurse-submodules https://github.com/pascalabcnet/pascalabcnet_vscode.git
 cd pascalabcnet_vscode
 ```
 
-Use a separate main PascalABC.NET checkout for compiler sources. Tooling submodule initialization is not needed for this build.
+For an existing clone, run `git submodule update --init -- externals/pascalabcnet`.
+The default build checks that this checkout matches the pinned commit and has
+no tracked source changes. It builds the unified Release .NET 10 kit and PCUs
+there, imports the kit, and builds Framework from the same sources:
+
+```powershell
+npm run package
+```
+
+No separate PascalABC.NET installation or sibling checkout is required to build.
 
 Install the pinned Node.js dependencies and compile TypeScript:
 
@@ -142,7 +151,8 @@ npm run compile
 
 Open the repository in Visual Studio Code and press `F5` to launch an Extension Development Host. A complete generated runtime must already be present in `bin/`.
 
-Prepare the unified Release kit in a separate main PascalABC.NET checkout:
+Optional development override: prepare the unified Release kit in a separate
+main PascalABC.NET checkout:
 
 ```powershell
 # Run these in the main PascalABC.NET repository, not in Tooling.
@@ -176,25 +186,27 @@ and create and verify the complete VSIX:
 ./scripts/build-vsix.ps1 -PascalABCSourcePath D:\PABC_GIT -Net10RuntimePath D:\PABC_GIT\bin-net10
 ```
 
-Alternatively set `PABC_SOURCE_PATH` and `PABC_NET10_RUNTIME_PATH` before running `npm run package`.
-The scripts fail if no kit is supplied; they never rebuild the .NET 10 backend
-from Tooling as a fallback.
+Alternatively set `PABC_SOURCE_PATH` and `PABC_NET10_RUNTIME_PATH` for explicit
+development overrides. Leave both unset for the pinned submodule build. Without
+a kit override the .NET 10 kit is rebuilt from the selected source checkout;
+an old `bin-net10` is never silently reused. Tooling is not a fallback.
 
 Command Prompt wrappers are also available:
 
 ```bat
-scripts\build-runtime.cmd -PascalABCSourcePath D:\PABC_GIT -Net10RuntimePath D:\PABC_GIT\bin-net10
+scripts\build-runtime.cmd
 scripts\build-server.cmd
-scripts\build-vsix.cmd -PascalABCSourcePath D:\PABC_GIT -Net10RuntimePath D:\PABC_GIT\bin-net10
+scripts\build-vsix.cmd
 ```
 
 The package filename is derived from the extension name and version, for example `multitarget-pascalabc-net-0.5.2.vsix`. Generated files under `bin/`, `out/`, and `.build/` are intentionally not committed. Reproducing a package requires the same prepared .NET 10 kit and the same main PascalABC.NET Framework sources.
 
 ## Updating the Backend
 
-Use the intended main PascalABC.NET revision, prepare its .NET 10 kit and build
-Framework from that checkout. Record the revision and local modifications when
-reproducing a build. Build scripts do not switch, fetch or commit in that checkout.
+Update and verify `externals/pascalabcnet` deliberately, then record its gitlink
+in the extension repository. The default build uses that exact revision for
+both targets and never follows the remote branch automatically. Explicit external
+source/kit overrides remain available for development.
 
 To install it locally:
 
