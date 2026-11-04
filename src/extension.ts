@@ -19,8 +19,6 @@ import {
 
 let controller: CompilerController | undefined;
 let languageClient: LanguageClient | undefined;
-// Keep the controller and LSP on the same kit until the window is reloaded.
-let configuredNet10RuntimePath = '';
 let runTerminal: vscode.Terminal | undefined;
 let activeRunExecution: vscode.TerminalShellExecution | undefined;
 let compilationInProgress = false;
@@ -61,7 +59,6 @@ const legacyRequiredCompilerComponents = [
     'SyntaxTree.dll',
     'SyntaxTreeConverters.dll',
     'SyntaxVisitors.dll',
-    'System.ValueTuple.dll',
     'TreeConverter.dll',
     'Lib',
     'Lng'
@@ -409,8 +406,6 @@ function registerSnippetProvider(
 }
 
 export function activate(context: vscode.ExtensionContext): void {
-    configuredNet10RuntimePath = vscode.workspace.getConfiguration('pascalabc')
-        .get<string>('net10RuntimePath', '').trim();
     const output = vscode.window.createOutputChannel(
         'PascalABC.NET',
         'pascalabc-output'
@@ -538,16 +533,6 @@ export function activate(context: vscode.ExtensionContext): void {
 
     context.subscriptions.push(
         vscode.workspace.onDidChangeConfiguration(event => {
-            if (event.affectsConfiguration('pascalabc.net10RuntimePath')) {
-                void vscode.window.showInformationMessage(
-                    'Reload VS Code to use the selected PascalABC.NET .NET 10 runtime.',
-                    'Reload Window'
-                ).then(selection => {
-                    if (selection === 'Reload Window') {
-                        void vscode.commands.executeCommand('workbench.action.reloadWindow');
-                    }
-                });
-            }
             if (!event.affectsConfiguration('pascalabc.compilerTarget')) {
                 return;
             }
@@ -1428,29 +1413,16 @@ function updateCompilerStatus(status: vscode.StatusBarItem): void {
 }
 
 function resolveNet10RuntimeDirectory(context: vscode.ExtensionContext): string {
-    const configuredPath = configuredNet10RuntimePath;
-    if (configuredPath === '') {
-        return context.asAbsolutePath(path.join('bin', 'net10'));
-    }
-    if (!path.isAbsolute(configuredPath)) {
-        throw new Error('pascalabc.net10RuntimePath must be an absolute directory path.');
-    }
-    return path.normalize(configuredPath);
+    return context.asAbsolutePath(path.join('bin', 'net10'));
 }
 
 function resolveCompilerProfile(
     context: vscode.ExtensionContext
 ): CompilerProfile {
-    const configuration =
-        vscode.workspace.getConfiguration('pascalabc');
     const target = getCompilerTarget();
-    const configuredPath =
-        configuration.get<string>('controllerPath', '').trim();
 
     if (target === 'net-framework') {
-        const controllerPath = configuredPath !== ''
-            ? path.resolve(configuredPath)
-            : context.asAbsolutePath(path.join(
+        const controllerPath = context.asAbsolutePath(path.join(
                 'bin',
                 'net-framework',
                 'PABCCompilerController.exe'

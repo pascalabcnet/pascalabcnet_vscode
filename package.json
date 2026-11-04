@@ -324,17 +324,6 @@
     "configuration": {
       "title": "PascalABC.NET",
       "properties": {
-        "pascalabc.net10RuntimePath": {
-          "type": "string",
-          "default": "",
-          "scope": "machine",
-          "description": "Absolute path to a prepared PascalABC.NET .NET 10 runtime directory, shared by the compiler controller and IntelliSense server. An empty value uses the bundled runtime. Reload VS Code after changing this setting. Does not affect .NET Framework compilation."
-        },
-        "pascalabc.controllerPath": {
-          "type": "string",
-          "default": "",
-          "description": "Path to a custom .NET Framework PABCCompilerController.exe. An empty value uses the bundled controller."
-        },
         "pascalabc.compilerTarget": {
           "type": "string",
           "enum": [

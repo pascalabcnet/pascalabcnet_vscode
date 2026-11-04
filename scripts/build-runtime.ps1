@@ -1,9 +1,5 @@
 [CmdletBinding()]
-param(
-    [string]$PascalABCSourcePath = $env:PABC_SOURCE_PATH,
-    [string]$Net10RuntimePath = $env:PABC_NET10_RUNTIME_PATH,
-    [string]$Net10ManifestSha256 = ''
-)
+param()
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -11,18 +7,16 @@ $ErrorActionPreference = 'Stop'
 $repositoryRoot = [System.IO.Path]::GetFullPath(
     (Join-Path $PSScriptRoot '..')
 )
-if ([string]::IsNullOrWhiteSpace($PascalABCSourcePath)) {
-    $PascalABCSourcePath = Join-Path $repositoryRoot 'externals\pascalabcnet'
-    if (-not (Test-Path -LiteralPath (Join-Path $PascalABCSourcePath 'Net10Runtime.slnx'))) {
-        & git -C $repositoryRoot submodule update --init -- externals/pascalabcnet
-        if ($LASTEXITCODE -ne 0) { throw 'Could not initialize the pinned PascalABC.NET submodule.' }
-    }
-    $pinned = ((& git -C $repositoryRoot ls-files --stage -- externals/pascalabcnet) -split '\s+')[1]
-    $actual = & git -C $PascalABCSourcePath rev-parse HEAD
-    if ($LASTEXITCODE -ne 0 -or $pinned -ne $actual) { throw 'PascalABC.NET checkout does not match the pinned submodule commit.' }
-    & git -C $PascalABCSourcePath diff --quiet HEAD --
-    if ($LASTEXITCODE -ne 0) { throw 'Pinned PascalABC.NET sources have local changes. Use an explicit source override for development.' }
+$PascalABCSourcePath = Join-Path $repositoryRoot 'externals\pascalabcnet'
+if (-not (Test-Path -LiteralPath (Join-Path $PascalABCSourcePath 'Net10Runtime.slnx'))) {
+    & git -C $repositoryRoot submodule update --init -- externals/pascalabcnet
+    if ($LASTEXITCODE -ne 0) { throw 'Could not initialize the pinned PascalABC.NET submodule.' }
 }
+$pinned = ((& git -C $repositoryRoot ls-files --stage -- externals/pascalabcnet) -split '\s+')[1]
+$actual = & git -C $PascalABCSourcePath rev-parse HEAD
+if ($LASTEXITCODE -ne 0 -or $pinned -ne $actual) { throw 'PascalABC.NET checkout does not match the pinned submodule commit.' }
+& git -C $PascalABCSourcePath diff --quiet HEAD --
+if ($LASTEXITCODE -ne 0) { throw 'Pinned PascalABC.NET sources have local changes.' }
 $PascalABCSourcePath = [System.IO.Path]::GetFullPath($PascalABCSourcePath)
 
 $pascalABCRuntimeRoot = Join-Path $PascalABCSourcePath 'bin'
@@ -567,13 +561,10 @@ Assert-DirectoryExists (Join-Path $pascalABCRuntimeRoot 'Lng\Eng')
 Assert-DirectoryExists (Join-Path $pascalABCRuntimeRoot 'Lng\Rus')
 Assert-OutputRuntimeNotInUse
 
-if ([string]::IsNullOrWhiteSpace($Net10RuntimePath)) {
-    # Both targets use this exact checkout. Never consume an older bin-net10
-    # left over from a previous submodule revision.
-    & (Join-Path $PascalABCSourcePath 'scripts\build-net10-runtime.ps1') -Configuration Release
-    & (Join-Path $PascalABCSourcePath 'scripts\rebuild-net10-standard-units.ps1') -Configuration Release -SkipBuild
-    $Net10RuntimePath = Join-Path $PascalABCSourcePath 'bin-net10'
-}
+# Both targets use this exact checkout. Never consume an older bin-net10.
+& (Join-Path $PascalABCSourcePath 'scripts\build-net10-runtime.ps1') -Configuration Release
+& (Join-Path $PascalABCSourcePath 'scripts\rebuild-net10-standard-units.ps1') -Configuration Release -SkipBuild
+$Net10RuntimePath = Join-Path $PascalABCSourcePath 'bin-net10'
 
 New-Item -ItemType Directory -Path $buildRoot -Force | Out-Null
 Remove-BuildDirectory $hostBuildRoot
@@ -588,8 +579,7 @@ New-Item -ItemType Directory -Path $legacyRuntimeRoot | Out-Null
 New-Item -ItemType Directory -Path $modernRuntimeRoot | Out-Null
 
 & (Join-Path $PSScriptRoot 'import-net10-runtime.ps1') `
-    -RuntimePath $Net10RuntimePath -Destination $modernRuntimeRoot `
-    -ManifestSha256 $Net10ManifestSha256
+    -RuntimePath $Net10RuntimePath -Destination $modernRuntimeRoot
 
 # Keep the existing Framework compiler, standard-unit and host build chain.
 Invoke-PascalABCBuild

@@ -1,9 +1,5 @@
 [CmdletBinding()]
-param(
-    [string]$PascalABCSourcePath = $env:PABC_SOURCE_PATH,
-    [string]$Net10RuntimePath = $env:PABC_NET10_RUNTIME_PATH,
-    [string]$Net10ManifestSha256 = ''
-)
+param()
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -44,9 +40,7 @@ $vsixPath = Join-Path $repositoryRoot $vsixName
 Push-Location $repositoryRoot
 try {
     Write-Host '=== Preparing PascalABC.NET runtime ==='
-    & $runtimeScript -PascalABCSourcePath $PascalABCSourcePath `
-        -Net10RuntimePath $Net10RuntimePath `
-        -Net10ManifestSha256 $Net10ManifestSha256
+    & $runtimeScript
     Assert-LastExitCode 'Runtime build'
 
     Write-Host '=== Restoring Node.js dependencies ==='

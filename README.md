@@ -99,20 +99,8 @@ with `--extensionDevelopmentPath=<extension repository>` and
 `--extensionTestsPath=<extension repository>/scripts/test-navigation.cjs`, using
 an isolated user-data directory for tests.
 
-### Trying a local unified .NET 10 kit
-
-Set `pascalabc.net10RuntimePath` in User Settings to the absolute path of a
-prepared runtime directory, for example `D:\PABC_GIT\bin-net10`, and reload the
-VS Code window. Both the .NET 10 compiler controller and the IntelliSense
-server will run from that directory. It must contain their DLL, deps.json and
-runtimeconfig.json files, shared dependencies, standard library sources and
-prepared .NET 10 PCUs, and language resources. This setting does not build or
-copy the kit and does not affect .NET Framework compilation. Clear the setting
-and reload to return to the bundled .NET 10 runtime. Changes take effect only
-after reload, so the controller and IntelliSense cannot switch kits separately.
-
-This is a local development override. VSIX packaging imports its own kit via
-the build-script parameter described below; it does not read VS Code settings.
+Compiler controllers and the language server always run from the extension's
+bundled runtime. External compiler/runtime paths are not supported.
 
 ## Source Code
 
@@ -151,27 +139,16 @@ npm run compile
 
 Open the repository in Visual Studio Code and press `F5` to launch an Extension Development Host. A complete generated runtime must already be present in `bin/`.
 
-Optional development override: prepare the unified Release kit in a separate
-main PascalABC.NET checkout:
+Build and validate both runtimes from the pinned submodule:
 
 ```powershell
-# Run these in the main PascalABC.NET repository, not in Tooling.
-./scripts/build-net10-runtime.ps1 -Configuration Release
-./scripts/rebuild-net10-standard-units.ps1 -Configuration Release -SkipBuild
+./scripts/build-runtime.ps1
 ```
 
-Provide that prepared directory when building the extension. For example:
-
-```powershell
-./scripts/build-runtime.ps1 -PascalABCSourcePath D:\PABC_GIT -Net10RuntimePath D:\PABC_GIT\bin-net10
-```
-
-This imports the .NET 10 kit without rebuilding it and builds/tests Framework
-directly from the supplied main sources. It accepts a prepared export as well as `bin-net10`.
+This rebuilds the .NET 10 kit and Framework from the same pinned sources.
 Only manifest-listed files and PCUs corresponding to manifest-listed standard
 sources are copied. Extra files in the source directory are ignored. The
-imported manifest records hashes for the PCUs too. To require a specific input
-snapshot, pass `-Net10ManifestSha256 <SHA256 of net10-runtime.manifest.json>`.
+imported manifest records hashes for the PCUs too.
 
 The language server is already included; the following command only validates it:
 
@@ -183,13 +160,11 @@ Import the kit, build Framework, restore Node.js dependencies, compile TypeScrip
 and create and verify the complete VSIX:
 
 ```powershell
-./scripts/build-vsix.ps1 -PascalABCSourcePath D:\PABC_GIT -Net10RuntimePath D:\PABC_GIT\bin-net10
+./scripts/build-vsix.ps1
 ```
 
-Alternatively set `PABC_SOURCE_PATH` and `PABC_NET10_RUNTIME_PATH` for explicit
-development overrides. Leave both unset for the pinned submodule build. Without
-a kit override the .NET 10 kit is rebuilt from the selected source checkout;
-an old `bin-net10` is never silently reused. Tooling is not a fallback.
+The build has no external source/kit overrides and does not read environment
+variables selecting a compiler checkout. An old `bin-net10` is never silently reused.
 
 Command Prompt wrappers are also available:
 
@@ -205,8 +180,7 @@ The package filename is derived from the extension name and version, for example
 
 Update and verify `externals/pascalabcnet` deliberately, then record its gitlink
 in the extension repository. The default build uses that exact revision for
-both targets and never follows the remote branch automatically. Explicit external
-source/kit overrides remain available for development.
+both targets and never follows the remote branch automatically.
 
 To install it locally:
 
