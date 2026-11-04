@@ -132,14 +132,16 @@ class CompilerController implements vscode.Disposable {
 
     public async compile(
         fileName: string,
-        outputDirectory: string
+        outputDirectory: string,
+        sourceFiles: { fileName: string; text: string }[]
     ): Promise<CompileResponse> {
         await this.ensureStarted();
 
         return this.sendRequest({
             command: 'compile',
             fileName,
-            outputDirectory
+            outputDirectory,
+            sourceFiles
         });
     }
 
@@ -994,7 +996,11 @@ async function performCompileActiveDocument(
                 );
                 await fs.promises.mkdir(outputDirectory, { recursive: true });
                 const response =
-                    await controller.compile(sourceFileName, outputDirectory);
+                    await controller.compile(sourceFileName, outputDirectory,
+                        vscode.workspace.textDocuments
+                            .filter(item => !item.isClosed && item.uri.scheme === 'file' &&
+                                path.extname(item.uri.fsPath).toLowerCase() === '.pas')
+                            .map(item => ({ fileName: item.uri.fsPath, text: item.getText() })));
 
                 publishDiagnostics(response, diagnostics);
 

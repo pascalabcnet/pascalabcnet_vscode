@@ -6,6 +6,7 @@ All notable changes to the PascalABC.NET extension are documented in this file.
 
 ### Changed
 
+- Both compiler targets now receive current snapshots of open Pascal files, including unsaved neighbouring module edits; the main program's existing save workflow is retained.
 - Removed external source/runtime overrides: builds use only the pinned PascalABC.NET submodule, and both compiler targets and LSP run only from the extension bundle.
 - Replaced the unused Tooling/transitive compiler chain with one direct PascalABC.NET submodule shared by both targets.
 - Framework compiler, standard units and controller/worker now build directly from a supplied main PascalABC.NET checkout; neither target uses Tooling in its packaging chain.
