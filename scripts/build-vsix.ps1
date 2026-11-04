@@ -1,7 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$PascalABCSourcePath = '',
-    [string]$ToolingSourcePath = '',
+    [string]$PascalABCSourcePath = $env:PABC_SOURCE_PATH,
     [string]$Net10RuntimePath = $env:PABC_NET10_RUNTIME_PATH,
     [string]$Net10ManifestSha256 = ''
 )
@@ -46,7 +45,7 @@ Push-Location $repositoryRoot
 try {
     Write-Host '=== Preparing PascalABC.NET runtime ==='
     & $runtimeScript -PascalABCSourcePath $PascalABCSourcePath `
-        -ToolingSourcePath $ToolingSourcePath -Net10RuntimePath $Net10RuntimePath `
+        -Net10RuntimePath $Net10RuntimePath `
         -Net10ManifestSha256 $Net10ManifestSha256
     Assert-LastExitCode 'Runtime build'
 

@@ -44,7 +44,7 @@ The TypeScript extension starts these components as child processes when needed:
 - `PABCCompilerController.exe` is used for the .NET Framework target; its .NET 10 counterpart is `PABCCompilerController.dll`, launched through `dotnet`. The controller accepts JSON Lines requests from the extension and manages compiler-worker lifetime.
 - `PABCCompilerWorker.exe` or `PABCCompilerWorker.dll` is the compiler worker. It loads the selected PascalABC.NET compiler runtime and performs compilation outside the VS Code extension host.
 
-The .NET 10 compiler, controller, worker, language server and dependencies come from one prepared kit built by the main PascalABC.NET repository. Packaging imports manifest-listed files and prepared standard PCUs, verifies their hashes, and checks the final VSIX against that exact file set. The .NET Framework target retains its existing build through the pinned Tooling submodule. The controller communicates with its worker through redirected standard input/output using JSON Lines. The required runtime components are bundled with the extension; no network transport is used between the controller and worker.
+Both compiler targets come from the main PascalABC.NET repository, without Tooling in the build chain. The .NET 10 compiler, controller, worker, language server and dependencies are imported as one prepared kit: manifest-listed files and standard PCUs are verified by SHA-256, including the final VSIX. Framework compiler, standard units and controller/worker are built directly from the supplied main checkout. Controller and worker communicate through redirected standard input/output using JSON Lines. Runtime components are bundled with the extension.
 
 ## Runtime Behavior
 
@@ -118,24 +118,20 @@ the build-script parameter described below; it does not read VS Code settings.
 
 The complete extension source is available at [github.com/pascalabcnet/pascalabcnet_vscode](https://github.com/pascalabcnet/pascalabcnet_vscode). Issues can be reported through the repository's [issue tracker](https://github.com/pascalabcnet/pascalabcnet_vscode/issues).
 
-The unified .NET 10 backend is maintained in the public [PascalABC.NET](https://github.com/pascalabcnet/pascalabcnet) repository. The pinned [Tooling](https://github.com/pascalabcnet/pascalabcnet-tooling) chain is retained for the .NET Framework target.
+Both backends are maintained in the public [PascalABC.NET](https://github.com/pascalabcnet/pascalabcnet) repository. The old Tooling submodule is no longer used by the build scripts.
 
 ## Building from Source
 
 The complete Windows packaging workflow requires Git, Node.js with npm, PowerShell, the .NET 10 SDK, and a Windows environment capable of running the .NET Framework 4.7.2 compiler-host smoke test.
 
-Clone the repository and its transitive submodules:
+Clone the extension repository:
 
 ```powershell
-git clone --recurse-submodules https://github.com/pascalabcnet/pascalabcnet_vscode.git
+git clone https://github.com/pascalabcnet/pascalabcnet_vscode.git
 cd pascalabcnet_vscode
 ```
 
-For an existing clone, initialize the pinned revisions with:
-
-```powershell
-git submodule update --init --recursive
-```
+Use a separate main PascalABC.NET checkout for compiler sources. Tooling submodule initialization is not needed for this build.
 
 Install the pinned Node.js dependencies and compile TypeScript:
 
@@ -157,11 +153,11 @@ Prepare the unified Release kit in a separate main PascalABC.NET checkout:
 Provide that prepared directory when building the extension. For example:
 
 ```powershell
-./scripts/build-runtime.ps1 -Net10RuntimePath D:\PABC_GIT\bin-net10
+./scripts/build-runtime.ps1 -PascalABCSourcePath D:\PABC_GIT -Net10RuntimePath D:\PABC_GIT\bin-net10
 ```
 
 This imports the .NET 10 kit without rebuilding it and builds/tests Framework
-through the existing chain. It accepts a prepared export as well as `bin-net10`.
+directly from the supplied main sources. It accepts a prepared export as well as `bin-net10`.
 Only manifest-listed files and PCUs corresponding to manifest-listed standard
 sources are copied. Extra files in the source directory are ignored. The
 imported manifest records hashes for the PCUs too. To require a specific input
@@ -177,38 +173,28 @@ Import the kit, build Framework, restore Node.js dependencies, compile TypeScrip
 and create and verify the complete VSIX:
 
 ```powershell
-./scripts/build-vsix.ps1 -Net10RuntimePath D:\PABC_GIT\bin-net10
+./scripts/build-vsix.ps1 -PascalABCSourcePath D:\PABC_GIT -Net10RuntimePath D:\PABC_GIT\bin-net10
 ```
 
-Alternatively set `PABC_NET10_RUNTIME_PATH` before running `npm run package`.
+Alternatively set `PABC_SOURCE_PATH` and `PABC_NET10_RUNTIME_PATH` before running `npm run package`.
 The scripts fail if no kit is supplied; they never rebuild the .NET 10 backend
 from Tooling as a fallback.
 
 Command Prompt wrappers are also available:
 
 ```bat
-scripts\build-runtime.cmd -Net10RuntimePath D:\PABC_GIT\bin-net10
+scripts\build-runtime.cmd -PascalABCSourcePath D:\PABC_GIT -Net10RuntimePath D:\PABC_GIT\bin-net10
 scripts\build-server.cmd
-scripts\build-vsix.cmd -Net10RuntimePath D:\PABC_GIT\bin-net10
+scripts\build-vsix.cmd -PascalABCSourcePath D:\PABC_GIT -Net10RuntimePath D:\PABC_GIT\bin-net10
 ```
 
-The package filename is derived from the extension name and version, for example `multitarget-pascalabc-net-0.5.2.vsix`. Generated files under `bin/`, `out/`, and `.build/` are intentionally not committed. Reproducing a package requires the same prepared .NET 10 kit and the pinned Framework source revisions.
+The package filename is derived from the extension name and version, for example `multitarget-pascalabc-net-0.5.2.vsix`. Generated files under `bin/`, `out/`, and `.build/` are intentionally not committed. Reproducing a package requires the same prepared .NET 10 kit and the same main PascalABC.NET Framework sources.
 
-## Updating the Tooling Backend
+## Updating the Backend
 
-This procedure now applies only to the retained .NET Framework build. Updating
-the .NET 10 backend means preparing and supplying a new unified kit.
-
-The VS Code repository pins only `externals/pascalabcnet-tooling`. The tooling repository in turn pins the compatible PascalABC.NET compiler sources.
-
-The update order is:
-
-1. update and verify the PascalABC.NET submodule pointer in the tooling repository;
-2. commit and test the tooling repository;
-3. update the tooling submodule pointer in this repository;
-4. initialize the pinned nested submodule with `git submodule update --init --recursive` and run the full extension build.
-
-Do not update `externals/pascalabcnet-tooling/pascalabcnet` directly from this repository, and do not use `git submodule update --remote` in the reproducible build flow.
+Use the intended main PascalABC.NET revision, prepare its .NET 10 kit and build
+Framework from that checkout. Record the revision and local modifications when
+reproducing a build. Build scripts do not switch, fetch or commit in that checkout.
 
 To install it locally:
 

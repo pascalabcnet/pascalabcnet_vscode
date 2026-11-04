@@ -1,7 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$PascalABCSourcePath = '',
-    [string]$ToolingSourcePath = '',
+    [string]$PascalABCSourcePath = $env:PABC_SOURCE_PATH,
     [string]$Net10RuntimePath = $env:PABC_NET10_RUNTIME_PATH,
     [string]$Net10ManifestSha256 = ''
 )
@@ -15,37 +14,13 @@ if ([string]::IsNullOrWhiteSpace($Net10RuntimePath)) {
 $repositoryRoot = [System.IO.Path]::GetFullPath(
     (Join-Path $PSScriptRoot '..')
 )
-$usesPinnedToolingSources = [string]::IsNullOrWhiteSpace($ToolingSourcePath)
-if ($usesPinnedToolingSources) {
-    $ToolingSourcePath = Join-Path $repositoryRoot `
-        'externals\pascalabcnet-tooling'
-}
-$ToolingSourcePath = [System.IO.Path]::GetFullPath($ToolingSourcePath)
-$usesPinnedPascalABCSources = [string]::IsNullOrWhiteSpace($PascalABCSourcePath)
-if ($usesPinnedPascalABCSources) {
-    $PascalABCSourcePath = Join-Path $ToolingSourcePath 'pascalabcnet'
+if ([string]::IsNullOrWhiteSpace($PascalABCSourcePath)) {
+    throw 'Provide -PascalABCSourcePath (or PABC_SOURCE_PATH) pointing to the main PascalABC.NET checkout.'
 }
 $PascalABCSourcePath = [System.IO.Path]::GetFullPath($PascalABCSourcePath)
 
-if ($usesPinnedToolingSources -and $usesPinnedPascalABCSources -and
-    -not (Test-Path -LiteralPath `
-        (Join-Path $PascalABCSourcePath 'PascalABCNET.sln') `
-        -PathType Leaf)) {
-    Write-Host '=== Initializing compiler submodules ==='
-    Push-Location $repositoryRoot
-    try {
-        & git submodule update --init --recursive
-        if ($LASTEXITCODE -ne 0) {
-            throw "Git submodule initialization failed with exit code $LASTEXITCODE."
-        }
-    }
-    finally {
-        Pop-Location
-    }
-}
-
 $pascalABCRuntimeRoot = Join-Path $PascalABCSourcePath 'bin'
-$compilerHostBuildScript = Join-Path $ToolingSourcePath `
+$compilerHostBuildScript = Join-Path $PascalABCSourcePath `
     'scripts\build-compiler-host.ps1'
 $buildRoot = Join-Path $repositoryRoot '.build'
 $hostBuildRoot = Join-Path $buildRoot 'compiler-host'
@@ -288,12 +263,12 @@ function Copy-HostOutput {
 }
 
 function Invoke-PascalABCBuild {
-    Write-Host 'Building PascalABC.NET compiler from the pinned submodule commit...'
+    Write-Host 'Building .NET Framework compiler from main PascalABC.NET...'
     Push-Location $PascalABCSourcePath
     try {
         & dotnet build -c Release --no-incremental --disable-build-servers `
             -m:1 -p:BuildInParallel=false --nologo -v:minimal `
-            PascalABCNET.sln -p:PABCNET_LEGACY_ONLY=true
+            pabcnetc.sln -p:PABCNET_LEGACY_ONLY=true
         if ($LASTEXITCODE -ne 0) {
             throw "PascalABC.NET build failed with exit code $LASTEXITCODE."
         }
@@ -575,7 +550,7 @@ function Assert-RuntimeLayout {
 
 Write-Host "PascalABC.NET source: $PascalABCSourcePath"
 Assert-DirectoryExists $PascalABCSourcePath
-Assert-FileExists (Join-Path $PascalABCSourcePath 'PascalABCNET.sln')
+Assert-FileExists (Join-Path $PascalABCSourcePath 'pabcnetc.sln')
 Assert-FileExists $compilerHostBuildScript
 Assert-FileExists (Join-Path $PascalABCSourcePath `
     'PascalABCNet.CompilerController\PascalABCNet.CompilerController.csproj')
@@ -608,11 +583,11 @@ Invoke-StandardModulesBuild
 
 $legacyHostBuildRoot = Join-Path $hostBuildRoot 'net-framework'
 
-Write-Host 'Building compiler host from PascalABC.NET Tooling...'
+Write-Host 'Building .NET Framework compiler host from main PascalABC.NET...'
 & $compilerHostBuildScript -OutputRoot $hostBuildRoot `
     -PascalABCSourcePath $PascalABCSourcePath -Target net-framework
 if ($LASTEXITCODE -ne 0) {
-    throw "Tooling compiler-host build failed with exit code $LASTEXITCODE."
+    throw "PascalABC.NET compiler-host build failed with exit code $LASTEXITCODE."
 }
 
 
