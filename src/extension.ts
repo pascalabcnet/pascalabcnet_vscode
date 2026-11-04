@@ -1563,6 +1563,79 @@ function sortMemberCompletions(
     return result;
 }
 
+type NavigationResult = vscode.Definition | vscode.LocationLink[] | null | undefined;
+interface MetadataDocument {
+    Title: string;
+    Text: string;
+}
+
+function metadataFileName(document: MetadataDocument): string {
+    // The title can include a member (System.Object.GetType); the view shows
+    // the declaring type. Locate that type in the rendered Pascal declaration.
+    const declaration = /^\s*([\p{L}_&][\p{L}\p{N}_&]*)(?:<[^\r\n=;]+>)?\s*=\s*(?:(?:sealed|abstract|partial)\s+)*(?:class|interface|record)\b/imu.exec(document.Text);
+    let title = document.Title;
+    if (declaration) {
+        const name = declaration[1].replace(/^&/, '');
+        const type = new RegExp(`(?:^|[.+])${name}(?:\x60\\d+)?(?=[.+\\[]|$)`).exec(title);
+        title = type ? title.slice(0, type.index + type[0].length) : name;
+    }
+    const safeName = title.replace(/`\d+/g, '').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
+        .slice(0, 120).replace(/[. ]+$/, '');
+    return `${safeName || 'Metadata'}.pas`;
+}
+
+async function selectNavigationIdentifier(
+    result: NavigationResult,
+    token: vscode.CancellationToken,
+    nameMetadata: (uri: vscode.Uri, token: vscode.CancellationToken) => Promise<vscode.Uri>
+): Promise<NavigationResult> {
+    if (!result) {
+        return result;
+    }
+
+    const selectName = async (location: vscode.Location | vscode.LocationLink) => {
+        const link = 'targetUri' in location;
+        const uri = link ? location.targetUri : location.uri;
+        const selection = link ? location.targetSelectionRange ?? location.targetRange : location.range;
+        if (uri.scheme === 'pascalabc-metadata' && !token.isCancellationRequested) {
+            const namedUri = await nameMetadata(uri, token);
+            return link ? { ...location, targetUri: namedUri } : new vscode.Location(namedUri, location.range);
+        }
+        // Legacy DOM locations point at column zero of a routine header.
+        // Select its identifier so a subsequent F12/Ctrl+F12 resolves the symbol,
+        // rather than the procedure/function keyword. Keep all semantic targets.
+        if (token.isCancellationRequested || uri.scheme !== 'file' ||
+            !selection.isEmpty || selection.start.character !== 0) {
+            return location;
+        }
+        try {
+            const document = await vscode.workspace.openTextDocument(uri);
+            if (token.isCancellationRequested || selection.start.line >= document.lineCount) {
+                return location;
+            }
+            const line = document.lineAt(selection.start.line).text;
+            const header = /^\s*(?:(?:class|static)\s+)*(?:procedure|function|constructor|destructor)\s+(?:[\p{L}\p{N}_&]+\.)*([\p{L}_&][\p{L}\p{N}_&]*)/iu.exec(line);
+            if (!header) {
+                return location;
+            }
+            const start = header[0].length - header[1].length;
+            const range = new vscode.Range(selection.start.line, start,
+                selection.start.line, start + header[1].length);
+            return link
+                ? { ...location, targetSelectionRange: range,
+                    targetRange: location.targetRange.union(range) }
+                : new vscode.Location(uri, range);
+        } catch {
+            // Navigation can target sources that are no longer on disk.
+            return location;
+        }
+    };
+    if (!Array.isArray(result)) {
+        return await selectName(result) as vscode.Location;
+    }
+    return await Promise.all(result.map(selectName)) as vscode.Location[] | vscode.LocationLink[];
+}
+
 function startLanguageServer(context: vscode.ExtensionContext): void {
     const output = vscode.window.createOutputChannel(
         'PascalABC.NET Language Server',
@@ -1593,6 +1666,37 @@ function startLanguageServer(context: vscode.ExtensionContext): void {
     }
 
     const dotnetCommand = resolveDotnetExecutable();
+    const metadataDocuments = new Map<string, MetadataDocument>();
+    const getMetadata = async (uri: vscode.Uri, token: vscode.CancellationToken) => {
+        // The first path segment remains the server's full content hash;
+        // the final segment is only a human-readable editor tab name.
+        const hash = uri.path.split('/')[1];
+        if (!/^[A-Fa-f0-9]{64}$/.test(hash || '')) {
+            throw new Error('Invalid PascalABC.NET metadata URI.');
+        }
+        if (!client.isRunning()) {
+            throw new Error('PascalABC.NET Language Server is not running.');
+        }
+        const cached = metadataDocuments.get(hash);
+        if (cached) {
+            return { hash, document: cached };
+        }
+        const document = await client.sendRequest<MetadataDocument | null>(
+            'pascalabc/metadata', { uri: `pascalabc-metadata:///${hash}` }, token
+        );
+        if (!document || typeof document.Text !== 'string' || typeof document.Title !== 'string') {
+            throw new Error('Metadata is no longer available. Repeat Go to Definition from the source file.');
+        }
+        if (metadataDocuments.size >= 32) {
+            metadataDocuments.delete(metadataDocuments.keys().next().value!);
+        }
+        metadataDocuments.set(hash, document);
+        return { hash, document };
+    };
+    const nameMetadata = async (uri: vscode.Uri, token: vscode.CancellationToken) => {
+        const { hash, document } = await getMetadata(uri, token);
+        return uri.with({ path: `/${hash}/${metadataFileName(document)}` });
+    };
 
     output.info(
         `Starting Language Server on ${process.platform}/${process.arch}: ` +
@@ -1618,6 +1722,27 @@ function startLanguageServer(context: vscode.ExtensionContext): void {
         outputChannel: output,
         diagnosticCollectionName: 'pascalabc-language-server',
         middleware: {
+            provideDefinition: async (document, position, token, next) =>
+                selectNavigationIdentifier(await next(document, position, token), token, nameMetadata),
+            provideImplementation: async (document, position, token, next) =>
+                selectNavigationIdentifier(await next(document, position, token), token, nameMetadata),
+            // Generated CLR declarations are read-only views, not Pascal sources
+            // to analyse or add to the server's open-document dependency graph.
+            didOpen: async (document, next) => {
+                if (document.uri.scheme !== 'pascalabc-metadata') {
+                    await next(document);
+                }
+            },
+            didChange: async (event, next) => {
+                if (event.document.uri.scheme !== 'pascalabc-metadata') {
+                    await next(event);
+                }
+            },
+            didClose: async (document, next) => {
+                if (document.uri.scheme !== 'pascalabc-metadata') {
+                    await next(document);
+                }
+            },
             provideCompletionItem: async (
                 document,
                 position,
@@ -1639,7 +1764,26 @@ function startLanguageServer(context: vscode.ExtensionContext): void {
         clientOptions
     );
 
+    context.subscriptions.push(
+        vscode.workspace.registerTextDocumentContentProvider('pascalabc-metadata', {
+            provideTextDocumentContent: async (uri, token) => {
+                const { document } = await getMetadata(uri, token);
+                return document.Text;
+            }
+        }),
+        vscode.workspace.onDidOpenTextDocument(document => {
+            if (document.uri.scheme === 'pascalabc-metadata' && document.languageId !== 'pascalabc') {
+                void vscode.languages.setTextDocumentLanguage(document, 'pascalabc').then(
+                    undefined, error => output.error(`Cannot highlight metadata: ${String(error)}`)
+                );
+            }
+        })
+    );
+
     context.subscriptions.push(client.onDidChangeState(event => {
+        if (event.newState === State.Stopped) {
+            metadataDocuments.clear();
+        }
         output.info(
             `Language Server state: ${State[event.oldState]} -> ` +
             `${State[event.newState]}`

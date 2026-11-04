@@ -77,7 +77,17 @@ Some optional modules depend on components normally installed with the full Pasc
 
 Semantic language features are provided by the language server included in the unified [PascalABC.NET](https://github.com/pascalabcnet/pascalabcnet) .NET 10 kit. The extension starts it through `dotnet` as an independent process and communicates with it through the standard Language Server Protocol over stdio.
 
-The language server owns document synchronization and PascalABC.NET semantic analysis, including global and member completion. The compiler controller remains an independent process and continues to handle explicit Compile and Run commands. NuGet user-interface integration and virtual metadata navigation from the newer server are not yet implemented by this extension.
+The language server owns document synchronization and PascalABC.NET semantic analysis, including global and member completion. Use **Go to Definition** (`F12`, or Ctrl+click) and **Go to Implementations** (`Ctrl+F12` on Windows/Linux) to navigate to Pascal source. CLR symbols without source open as read-only Pascal declarations generated from metadata, not decompiled method bodies. Navigation depends on the capabilities of the selected language server. The compiler controller remains an independent process and continues to handle explicit Compile and Run commands. NuGet user-interface integration is not yet implemented by this extension.
+
+Known limitations of the current server: some routine calls with arguments can
+resolve to the argument rather than the routine, and implementation lookup may
+return no result for procedures in user units. Standard-library implementation
+navigation and CLR metadata views are covered by the extension integration test.
+
+To run that test after preparing `bin/` and compiling TypeScript, launch VS Code
+with `--extensionDevelopmentPath=<extension repository>` and
+`--extensionTestsPath=<extension repository>/scripts/test-navigation.cjs`, using
+an isolated user-data directory for tests.
 
 ### Trying a local unified .NET 10 kit
 
