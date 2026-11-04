@@ -182,7 +182,7 @@ scripts\build-server.cmd
 scripts\build-vsix.cmd
 ```
 
-The package filename is derived from the extension name and version, for example `multitarget-pascalabc-net-0.5.2.vsix`. Generated files under `bin/`, `out/`, and `.build/` are intentionally not committed. Reproducing a package requires the same prepared .NET 10 kit and the same main PascalABC.NET Framework sources.
+The package filename is derived from the extension name and version, for example `multitarget-pascalabc-net-0.6.0.vsix`. Generated files under `bin/`, `out/`, and `.build/` are intentionally not committed. Reproducing a package requires the pinned PascalABC.NET sources and the documented build environment.
 
 ## Updating the Backend
 
@@ -193,7 +193,7 @@ both targets and never follows the remote branch automatically.
 To install it locally:
 
 ```powershell
-code --install-extension .\multitarget-pascalabc-net-0.5.2.vsix
+code --install-extension .\multitarget-pascalabc-net-0.6.0.vsix
 ```
 
 ## Commands

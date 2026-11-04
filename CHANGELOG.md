@@ -2,7 +2,7 @@
 
 All notable changes to the PascalABC.NET extension are documented in this file.
 
-## Unreleased
+## 0.6.0 — Unified Backend, Navigation and NuGet — 2026-11-04
 
 ### Changed
 
@@ -11,13 +11,12 @@ All notable changes to the PascalABC.NET extension are documented in this file.
 - Both compiler targets now receive current snapshots of open Pascal files, including unsaved neighbouring module edits; the main program's existing save workflow is retained.
 - Removed external source/runtime overrides: builds use only the pinned PascalABC.NET submodule, and both compiler targets and LSP run only from the extension bundle.
 - Replaced the unused Tooling/transitive compiler chain with one direct PascalABC.NET submodule shared by both targets.
-- Framework compiler, standard units and controller/worker now build directly from a supplied main PascalABC.NET checkout; neither target uses Tooling in its packaging chain.
+- Framework compiler, standard units and controller/worker build from the same pinned PascalABC.NET checkout as .NET 10; neither target uses Tooling.
 - Added NuGet package search, version selection, editable `$package` directives, explicit language-server restore, progress, cancellation and a restore-required status item.
 - Enabled navigation from the unified language server, including read-only Pascal metadata documents for CLR symbols. Source definition and implementation use the standard VS Code commands.
 - Routine navigation now selects the routine name instead of the declaration keyword, so implementation navigation can be repeated from an opened declaration.
 - CLR metadata tabs show declaring-type names such as `System.Object.pas`, retaining the full server hash in the virtual URI.
-- VSIX packaging now imports the unified .NET 10 kit from main PascalABC.NET, including LSP and standard PCUs, and verifies the exact runtime file set and SHA-256 hashes. Framework retains its existing build chain.
-- The compiler controller and worker are now built from the pinned PascalABC.NET Tooling submodule instead of duplicated extension sources.
+- VSIX packaging imports the unified .NET 10 kit built from the pinned submodule, including LSP and standard PCUs, and verifies the exact runtime file set and SHA-256 hashes.
 - Replaced the controller-to-worker NetMQ transport with JSON Lines over redirected standard input/output.
 - Removed the bundled NetMQ, AsyncIO, and NaCl transport dependencies.
 - Updated the packaged compiler worker name to `PABCCompilerWorker`.
@@ -25,6 +24,7 @@ All notable changes to the PascalABC.NET extension are documented in this file.
 ### Documentation
 
 - Documented macOS support for the .NET 10 compiler, IntelliSense, and integrated terminal execution.
+- Updated the source build instructions for the direct PascalABC.NET submodule. Windows and ALT Linux workflows were checked; on Linux, desktop shortcuts may intercept Ctrl+F12, so Go to Implementations remains available through the Command Palette.
 
 ## 0.5.0 — Multitarget Branding and Transparency
 
