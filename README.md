@@ -77,7 +77,17 @@ Some optional modules depend on components normally installed with the full Pasc
 
 Semantic language features are provided by the language server included in the unified [PascalABC.NET](https://github.com/pascalabcnet/pascalabcnet) .NET 10 kit. The extension starts it through `dotnet` as an independent process and communicates with it through the standard Language Server Protocol over stdio.
 
-The language server owns document synchronization and PascalABC.NET semantic analysis, including global and member completion. Use **Go to Definition** (`F12`, or Ctrl+click) and **Go to Implementations** (`Ctrl+F12` on Windows/Linux) to navigate to Pascal source. CLR symbols without source open as read-only Pascal declarations generated from metadata, not decompiled method bodies. Navigation depends on the capabilities of the selected language server. The compiler controller remains an independent process and continues to handle explicit Compile and Run commands. NuGet user-interface integration is not yet implemented by this extension.
+The language server owns document synchronization and PascalABC.NET semantic analysis, including global and member completion. Use **Go to Definition** (`F12`, or Ctrl+click) and **Go to Implementations** (`Ctrl+F12` on Windows/Linux) to navigate to Pascal source. CLR symbols without source open as read-only Pascal declarations generated from metadata, not decompiled method bodies. Navigation depends on the capabilities of the selected language server. The compiler controller remains an independent process and continues to handle explicit Compile and Run commands.
+
+### NuGet packages (.NET 10)
+
+Open a saved PascalABC.NET file and use the Command Palette:
+
+- **PascalABC.NET: NuGet — Search and Add Package** searches configured package sources, then lets you select a package and version.
+- **PascalABC.NET: NuGet — Package Versions** looks up versions of an exact package ID.
+- **PascalABC.NET: NuGet — Restore Packages** restores packages for the current document, showing progress and a Cancel button. Details appear in the **PascalABC.NET NuGet** Output channel.
+
+Selecting a version inserts or updates `{$package Package.Id 1.2.3}` in the editor; the edit can be undone. It does not save the document or restore packages automatically. The language server uses manual restore mode; a **NuGet: Restore** status item appears when the current document requires packages. Explicit Compile/Run remains a separate compiler operation and can perform its own package restore. Sources and caches follow the backend's NuGet.Config handling. This integration requires the unified server and does not add package support to the Framework compiler.
 
 Known limitations of the current server: some routine calls with arguments can
 resolve to the argument rather than the routine, and implementation lookup may

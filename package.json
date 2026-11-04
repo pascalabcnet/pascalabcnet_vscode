@@ -209,6 +209,18 @@
     ],
     "commands": [
       {
+        "command": "pascalabc.nugetSearch",
+        "title": "PascalABC.NET: NuGet — Найти и добавить пакет"
+      },
+      {
+        "command": "pascalabc.nugetVersions",
+        "title": "PascalABC.NET: NuGet — Выбрать версию пакета"
+      },
+      {
+        "command": "pascalabc.nugetRestore",
+        "title": "PascalABC.NET: NuGet — Восстановить пакеты"
+      },
+      {
         "command": "pascalabc.compileCurrentFile",
         "title": "PascalABC.NET: Compile Current File",
         "icon": {

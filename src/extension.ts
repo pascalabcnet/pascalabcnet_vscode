@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { registerNuGet } from './nuget';
 import {
     ChildProcessWithoutNullStreams,
     execFile,
@@ -1718,6 +1719,7 @@ function startLanguageServer(context: vscode.ExtensionContext): void {
         }
     };
     const clientOptions: LanguageClientOptions = {
+        initializationOptions: { manualNuGetRestore: true },
         documentSelector: [{ language: 'pascalabc' }],
         outputChannel: output,
         diagnosticCollectionName: 'pascalabc-language-server',
@@ -1763,6 +1765,7 @@ function startLanguageServer(context: vscode.ExtensionContext): void {
         serverOptions,
         clientOptions
     );
+    registerNuGet(context, client);
 
     context.subscriptions.push(
         vscode.workspace.registerTextDocumentContentProvider('pascalabc-metadata', {

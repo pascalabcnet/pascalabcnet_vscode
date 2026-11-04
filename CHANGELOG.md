@@ -6,6 +6,7 @@ All notable changes to the PascalABC.NET extension are documented in this file.
 
 ### Changed
 
+- Added NuGet package search, version selection, editable `$package` directives, explicit language-server restore, progress, cancellation and a restore-required status item.
 - Enabled navigation from the unified language server, including read-only Pascal metadata documents for CLR symbols. Source definition and implementation use the standard VS Code commands.
 - Routine navigation now selects the routine name instead of the declaration keyword, so implementation navigation can be repeated from an opened declaration.
 - CLR metadata tabs show declaring-type names such as `System.Object.pas`, retaining the full server hash in the virtual URI.
