@@ -1,11 +1,16 @@
 [CmdletBinding()]
 param(
     [string]$PascalABCSourcePath = '',
-    [string]$ToolingSourcePath = ''
+    [string]$ToolingSourcePath = '',
+    [string]$Net10RuntimePath = $env:PABC_NET10_RUNTIME_PATH,
+    [string]$Net10ManifestSha256 = ''
 )
 
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+if ([string]::IsNullOrWhiteSpace($Net10RuntimePath)) {
+    throw 'Provide -Net10RuntimePath (or PABC_NET10_RUNTIME_PATH) pointing to a prepared unified PascalABC.NET kit.'
+}
 
 $repositoryRoot = [System.IO.Path]::GetFullPath(
     (Join-Path $PSScriptRoot '..')
@@ -40,7 +45,6 @@ if ($usesPinnedToolingSources -and $usesPinnedPascalABCSources -and
 }
 
 $pascalABCRuntimeRoot = Join-Path $PascalABCSourcePath 'bin'
-$modernPascalABCRuntimeRoot = Join-Path $PascalABCSourcePath 'bin-net10'
 $compilerHostBuildScript = Join-Path $ToolingSourcePath `
     'scripts\build-compiler-host.ps1'
 $buildRoot = Join-Path $repositoryRoot '.build'
@@ -50,10 +54,6 @@ $backupBinRoot = Join-Path $buildRoot 'bin-backup'
 $outputBinRoot = Join-Path $repositoryRoot 'bin'
 $compilerPath = Join-Path $pascalABCRuntimeRoot 'pabcnetcclear.exe'
 $standardModulesCompilerPath = Join-Path $pascalABCRuntimeRoot 'pabcnetc.exe'
-$modernCompilerPath = Join-Path $modernPascalABCRuntimeRoot `
-    'pabcnetcclear.exe'
-$modernCodeCompletionProject = Join-Path $PascalABCSourcePath `
-    'CodeCompletion\CodeCompletion.csproj'
 
 $excludedStandardModules = @(
     'ABCHouse',
@@ -331,76 +331,6 @@ function Invoke-StandardModulesBuild {
     }
 }
 
-function Invoke-ModernPascalABCBuild {
-    $solutionPath = Join-Path $PascalABCSourcePath 'pabcnetc.sln'
-    $generatorRoot = Join-Path $PascalABCSourcePath 'ReleaseGenerators'
-    $generatorName = 'RebuildStandartModulesNet10'
-    $generatorSource = Join-Path $generatorRoot ($generatorName + '.pas')
-    $libraryRoot = Join-Path $modernPascalABCRuntimeRoot 'Lib'
-
-    Assert-FileExists $solutionPath
-    Assert-FileExists $generatorSource
-
-    Write-Host 'Building PascalABC.NET compiler for .NET 10...'
-    & dotnet build $solutionPath `
-        -c Release `
-        -p:TargetFramework=net10.0 `
-        -p:BuildInParallel=false `
-        --disable-build-servers `
-        -m:1 `
-        --nologo `
-        -v:minimal
-    if ($LASTEXITCODE -ne 0) {
-        throw "PascalABC.NET net10 build failed with exit code $LASTEXITCODE."
-    }
-
-    Write-Host 'Building PascalABC.NET CodeCompletion for .NET 10...'
-    & dotnet build $modernCodeCompletionProject `
-        -c Release `
-        -f net10.0 `
-        --no-incremental `
-        --disable-build-servers `
-        -m:1 `
-        -p:BuildInParallel=false `
-        --nologo `
-        -v:minimal
-    if ($LASTEXITCODE -ne 0) {
-        throw "PascalABC.NET CodeCompletion net10 build failed with exit code $LASTEXITCODE."
-    }
-
-    Assert-FileExists $modernCompilerPath
-    Assert-DirectoryExists $libraryRoot
-
-    Write-Host 'Rebuilding PascalABC.NET standard modules for .NET 10...'
-    Get-ChildItem -LiteralPath $libraryRoot -Recurse -File -Filter '*.pcu' |
-        Remove-Item -Force
-
-    Push-Location $generatorRoot
-    try {
-        & $modernCompilerPath ($generatorName + '.pas')
-        if ($LASTEXITCODE -ne 0) {
-            throw "Modern standard module build failed with exit code $LASTEXITCODE."
-        }
-    }
-    finally {
-        Pop-Location
-    }
-
-    $modernUnits = @(Get-ChildItem -LiteralPath $libraryRoot `
-        -Recurse -File -Filter '*.pcu')
-    if ($modernUnits.Count -eq 0) {
-        throw 'No .NET 10 compiled Pascal units were created.'
-    }
-
-    foreach ($extension in @('.exe', '.exe.config', '.dll', '.pdb',
-        '.deps.json', '.runtimeconfig.json')) {
-        $generatedPath = Join-Path $generatorRoot ($generatorName + $extension)
-        if (Test-Path -LiteralPath $generatedPath) {
-            Remove-Item -LiteralPath $generatedPath -Force
-        }
-    }
-}
-
 function Read-ControllerResponse {
     param(
         [System.Diagnostics.Process]$Process,
@@ -646,7 +576,6 @@ function Assert-RuntimeLayout {
 Write-Host "PascalABC.NET source: $PascalABCSourcePath"
 Assert-DirectoryExists $PascalABCSourcePath
 Assert-FileExists (Join-Path $PascalABCSourcePath 'PascalABCNET.sln')
-Assert-FileExists $modernCodeCompletionProject
 Assert-FileExists $compilerHostBuildScript
 Assert-FileExists (Join-Path $PascalABCSourcePath `
     'PascalABCNet.CompilerController\PascalABCNet.CompilerController.csproj')
@@ -656,8 +585,6 @@ Assert-DirectoryExists (Join-Path $pascalABCRuntimeRoot 'Lib')
 Assert-DirectoryExists (Join-Path $pascalABCRuntimeRoot 'Lng\Eng')
 Assert-DirectoryExists (Join-Path $pascalABCRuntimeRoot 'Lng\Rus')
 Assert-OutputRuntimeNotInUse
-Invoke-PascalABCBuild
-Invoke-StandardModulesBuild
 
 New-Item -ItemType Directory -Path $buildRoot -Force | Out-Null
 Remove-BuildDirectory $hostBuildRoot
@@ -671,41 +598,36 @@ $modernRuntimeRoot = Join-Path $nextBinRoot 'net10'
 New-Item -ItemType Directory -Path $legacyRuntimeRoot | Out-Null
 New-Item -ItemType Directory -Path $modernRuntimeRoot | Out-Null
 
+& (Join-Path $PSScriptRoot 'import-net10-runtime.ps1') `
+    -RuntimePath $Net10RuntimePath -Destination $modernRuntimeRoot `
+    -ManifestSha256 $Net10ManifestSha256
+
+# Keep the existing Framework compiler, standard-unit and host build chain.
+Invoke-PascalABCBuild
+Invoke-StandardModulesBuild
+
 $legacyHostBuildRoot = Join-Path $hostBuildRoot 'net-framework'
-$modernHostBuildRoot = Join-Path $hostBuildRoot 'net10'
 
 Write-Host 'Building compiler host from PascalABC.NET Tooling...'
 & $compilerHostBuildScript -OutputRoot $hostBuildRoot `
-    -PascalABCSourcePath $PascalABCSourcePath -Target all
+    -PascalABCSourcePath $PascalABCSourcePath -Target net-framework
 if ($LASTEXITCODE -ne 0) {
     throw "Tooling compiler-host build failed with exit code $LASTEXITCODE."
 }
 
-# The compiler-host build can recreate bin-net10. Build the final modern
-# compiler and PCU set afterwards so that the packaged Lib is complete.
-Invoke-ModernPascalABCBuild
 
 Assert-FileExists $compilerPath
 foreach ($dllName in $legacyCompilerDlls) {
     Assert-FileExists (Join-Path $pascalABCRuntimeRoot $dllName)
-}
-foreach ($dllName in $modernCompilerDlls) {
-    Assert-FileExists (Join-Path $modernPascalABCRuntimeRoot $dllName)
 }
 
 foreach ($dllName in $legacyCompilerDlls) {
     Copy-RequiredFile (Join-Path $pascalABCRuntimeRoot $dllName) `
         $legacyRuntimeRoot
 }
-foreach ($dllFile in Get-ChildItem -LiteralPath $modernPascalABCRuntimeRoot `
-    -File -Filter '*.dll') {
-    Copy-Item -LiteralPath $dllFile.FullName -Destination $modernRuntimeRoot
-}
 
 Copy-HostOutput $legacyHostBuildRoot $legacyRuntimeRoot `
     @('.dll', '.exe', '.exe.config') -PreserveExisting
-Copy-HostOutput $modernHostBuildRoot $modernRuntimeRoot `
-    @('.dll', '.deps.json', '.runtimeconfig.json') -PreserveExisting
 
 $legacyLibRoot = Join-Path $legacyRuntimeRoot 'Lib'
 Copy-PascalLibraryArtifacts (Join-Path $pascalABCRuntimeRoot 'Lib') `
@@ -715,16 +637,9 @@ Copy-RequiredFile (Join-Path $pascalABCRuntimeRoot 'Lib\turtle.png') `
 Copy-LanguageResources (Join-Path $pascalABCRuntimeRoot 'Lng') `
     (Join-Path $legacyRuntimeRoot 'Lng')
 
-$modernLibRoot = Join-Path $modernRuntimeRoot 'Lib'
-Copy-PascalLibraryArtifacts (Join-Path $modernPascalABCRuntimeRoot 'Lib') `
-    $modernLibRoot
-Copy-RequiredFile (Join-Path $modernPascalABCRuntimeRoot 'Lib\turtle.png') `
-    $modernLibRoot
-Copy-LanguageResources (Join-Path $modernPascalABCRuntimeRoot 'Lng') `
-    (Join-Path $modernRuntimeRoot 'Lng')
 
 Assert-RuntimeLayout $legacyRuntimeRoot 'net-framework'
-Assert-RuntimeLayout $modernRuntimeRoot 'net10'
+& (Join-Path $PSScriptRoot 'verify-net10-runtime.ps1') -RuntimePath $modernRuntimeRoot
 Test-CompilerRuntime $legacyRuntimeRoot 'net-framework'
 Test-CompilerRuntime $modernRuntimeRoot 'net10'
 Assert-OutputRuntimeNotInUse

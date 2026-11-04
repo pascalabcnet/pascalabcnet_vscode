@@ -1,7 +1,9 @@
 [CmdletBinding()]
 param(
     [string]$PascalABCSourcePath = '',
-    [string]$ToolingSourcePath = ''
+    [string]$ToolingSourcePath = '',
+    [string]$Net10RuntimePath = $env:PABC_NET10_RUNTIME_PATH,
+    [string]$Net10ManifestSha256 = ''
 )
 
 Set-StrictMode -Version Latest
@@ -11,7 +13,6 @@ $repositoryRoot = [System.IO.Path]::GetFullPath(
     (Join-Path $PSScriptRoot '..')
 )
 $runtimeScript = Join-Path $PSScriptRoot 'build-runtime.ps1'
-$serverScript = Join-Path $PSScriptRoot 'build-server.ps1'
 $packageJsonPath = Join-Path $repositoryRoot 'package.json'
 
 function Assert-LastExitCode {
@@ -26,9 +27,6 @@ if (-not (Test-Path -LiteralPath $runtimeScript -PathType Leaf)) {
     throw "Runtime build script was not found: $runtimeScript"
 }
 
-if (-not (Test-Path -LiteralPath $serverScript -PathType Leaf)) {
-    throw "Language server build script was not found: $serverScript"
-}
 
 if (-not (Test-Path -LiteralPath $packageJsonPath -PathType Leaf)) {
     throw "package.json was not found: $packageJsonPath"
@@ -48,12 +46,9 @@ Push-Location $repositoryRoot
 try {
     Write-Host '=== Preparing PascalABC.NET runtime ==='
     & $runtimeScript -PascalABCSourcePath $PascalABCSourcePath `
-        -ToolingSourcePath $ToolingSourcePath
+        -ToolingSourcePath $ToolingSourcePath -Net10RuntimePath $Net10RuntimePath `
+        -Net10ManifestSha256 $Net10ManifestSha256
     Assert-LastExitCode 'Runtime build'
-
-    Write-Host '=== Publishing PascalABC.NET language server ==='
-    & $serverScript -ToolingSourcePath $ToolingSourcePath
-    Assert-LastExitCode 'Language server publish'
 
     Write-Host '=== Restoring Node.js dependencies ==='
     & npm.cmd ci
@@ -66,6 +61,8 @@ try {
     Write-Host "=== Packaging $vsixName ==="
     & npx.cmd --yes '@vscode/vsce' package --out $vsixPath
     Assert-LastExitCode 'VSIX packaging'
+    & (Join-Path $PSScriptRoot 'verify-net10-runtime.ps1') `
+        -RuntimePath (Join-Path $repositoryRoot 'bin\net10') -VsixPath $vsixPath
 }
 finally {
     Pop-Location

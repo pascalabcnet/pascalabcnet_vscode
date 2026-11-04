@@ -6,6 +6,8 @@ All notable changes to the PascalABC.NET extension are documented in this file.
 
 ### Changed
 
+- VSIX packaging now imports the unified .NET 10 kit from main PascalABC.NET, including LSP and standard PCUs, and verifies the exact runtime file set and SHA-256 hashes. Framework retains its existing build chain.
+- Added an optional local unified .NET 10 kit path shared by the compiler controller and IntelliSense, with the bundled runtime retained as the default.
 - The compiler controller and worker are now built from the pinned PascalABC.NET Tooling submodule instead of duplicated extension sources.
 - Replaced the controller-to-worker NetMQ transport with JSON Lines over redirected standard input/output.
 - Removed the bundled NetMQ, AsyncIO, and NaCl transport dependencies.
