@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { registerNuGet } from './nuget';
+import { CompilationProgress, CompilerProgressEvent } from './compilationProgress';
 import {
     ChildProcessWithoutNullStreams,
     execFile,
@@ -106,6 +107,7 @@ interface CompileResponse {
 }
 
 interface PendingRequest {
+    onProgress?: (event: CompilerProgressEvent) => void;
     resolve: (response: CompileResponse) => void;
     reject: (error: Error) => void;
     timer: NodeJS.Timeout;
@@ -135,14 +137,19 @@ class CompilerController implements vscode.Disposable {
         outputDirectory: string,
         sourceFiles: { fileName: string; text: string }[]
     ): Promise<CompileResponse> {
-        await this.ensureStarted();
-
-        return this.sendRequest({
+        const progress = new CompilationProgress(this.output);
+        try {
+            await this.ensureStarted();
+            return await this.sendRequest({
             command: 'compile',
+            emitEvents: true,
             fileName,
             outputDirectory,
             sourceFiles
-        });
+            }, 5 * 60 * 1000, event => progress.update(event));
+        } finally {
+            progress.dispose();
+        }
     }
 
     private async ensureStarted(): Promise<void> {
@@ -218,7 +225,8 @@ class CompilerController implements vscode.Disposable {
 
     private sendRequest(
         request: Record<string, unknown>,
-        timeoutMs = 5 * 60 * 1000
+        timeoutMs = 5 * 60 * 1000,
+        onProgress?: (event: CompilerProgressEvent) => void
     ): Promise<CompileResponse & Record<string, unknown>> {
         if (!this.process || this.process.exitCode !== null) {
             return Promise.reject(
@@ -236,6 +244,7 @@ class CompilerController implements vscode.Disposable {
             }, timeoutMs);
 
             this.pending.set(id, {
+                onProgress,
                 resolve: resolve as (response: CompileResponse) => void,
                 reject,
                 timer
@@ -258,7 +267,7 @@ class CompilerController implements vscode.Disposable {
     }
 
     private handleResponseLine(line: string): void {
-        let response: CompileResponse;
+        let response: CompileResponse & Partial<CompilerProgressEvent>;
 
         try {
             response = JSON.parse(line) as CompileResponse;
@@ -270,6 +279,11 @@ class CompilerController implements vscode.Disposable {
         }
 
         const pendingRequest = this.pending.get(response.id);
+
+        if (response.event === 'compilerState' || response.event === 'compilerMessage') {
+            pendingRequest?.onProgress?.(response as CompilerProgressEvent);
+            return; // Events share the request ID but never complete the request.
+        }
 
         if (!pendingRequest) {
             this.output.appendLine(

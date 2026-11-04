@@ -6,6 +6,8 @@ All notable changes to the PascalABC.NET extension are documented in this file.
 
 ### Changed
 
+- Output distinguishes source compilation from PCU reading using actual compiler events for both targets, including unsaved module snapshots.
+- Enabled controller progress events for both compiler targets, with a delayed 600 ms status indicator and cleanup on success, errors and controller shutdown.
 - Both compiler targets now receive current snapshots of open Pascal files, including unsaved neighbouring module edits; the main program's existing save workflow is retained.
 - Removed external source/runtime overrides: builds use only the pinned PascalABC.NET submodule, and both compiler targets and LSP run only from the extension bundle.
 - Replaced the unused Tooling/transitive compiler chain with one direct PascalABC.NET submodule shared by both targets.

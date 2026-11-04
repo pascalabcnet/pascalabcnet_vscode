@@ -48,6 +48,14 @@ Both compiler targets come from the main PascalABC.NET repository, without Tooli
 
 ## Runtime Behavior
 
+Compilation progress for both targets appears in the status bar after a 600 ms
+delay, including controller startup. Fast compilations do not show the progress
+indicator. Compiler messages go to Output; completion, errors and controller
+shutdown always remove the indicator. No percentage is invented for compiler stages.
+Output also reports `Компиляция исходника: <path>` when source compilation
+starts and `Чтение PCU: <path>` when a compiled unit is read. A rejected PCU
+may be followed by source compilation; reading is not reported as successful loading.
+
 **Compile Current File** saves the main program, starts the selected controller lazily, and sends a snapshot of all open file-backed `.pas` documents. Both targets compile dependencies using their current editor text without saving neighbouring modules. Untitled modules must first be saved to establish their paths. Returned compiler diagnostics are published in VS Code.
 
 **Compile and Run** uses the same compilation path. After successful compilation it starts the generated program in the integrated terminal so that console input and output remain available. The program is run directly for .NET Framework or through `dotnet` for .NET 10; it is not executed by the language server or compiler worker.
