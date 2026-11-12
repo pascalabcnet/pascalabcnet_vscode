@@ -1992,8 +1992,6 @@ function registerFullLineCompletion(
             applyState({ install: true, enable: true })),
         vscode.commands.registerCommand('pascalabc.fullLineCompletion.remove', () =>
             runFullLineOperation(() => removeFullLineComponents(context, output))),
-        vscode.commands.registerCommand('pascalabc.fullLineCompletion.restartServer', () =>
-            runFullLineOperation(() => restartModelServer(context, output))),
         vscode.commands.registerCommand('pascalabc.fullLineCompletion.status', () =>
             showFullLineStatus(output)),
         // The setting is the single source of truth: the checkbox and the
@@ -2209,17 +2207,6 @@ async function removeFullLineComponents(
     }
     startLanguageServer(context);
     void vscode.window.showInformationMessage('Компоненты ИИ-дополнения удалены.');
-}
-
-async function restartModelServer(
-    context: vscode.ExtensionContext,
-    output: vscode.OutputChannel
-): Promise<void> {
-    const installDir = fullline.getInstallDir();
-    await fullline.stopLlamaServer(installDir);
-    await restartLanguageServer(context);
-    trackModelWarmup(installDir, output);
-    void vscode.window.showInformationMessage('Сервер моделей перезапущен.');
 }
 
 function trackModelWarmup(installDir: string, output: vscode.OutputChannel): void {

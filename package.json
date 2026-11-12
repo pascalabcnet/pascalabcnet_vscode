@@ -284,10 +284,6 @@
         "title": "PascalABC.NET: ИИ-дополнение — удалить компоненты"
       },
       {
-        "command": "pascalabc.fullLineCompletion.restartServer",
-        "title": "PascalABC.NET: ИИ-дополнение — перезапустить сервер моделей"
-      },
-      {
         "command": "pascalabc.fullLineCompletion.status",
         "title": "PascalABC.NET: ИИ-дополнение — статус и диагностика"
       }
