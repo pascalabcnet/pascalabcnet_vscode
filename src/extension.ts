@@ -2262,13 +2262,22 @@ async function checkFullLineOnStartup(
     const config = fullline.readSetupConfig(installDir);
     const recommendedUrl = fullline.resolveModelUrl();
     if (config?.modelUrl && config.modelUrl !== recommendedUrl) {
+        output.appendLine(
+            `Full line completion: model update available ` +
+            `(installed ${config.modelUrl}, recommended ${recommendedUrl}).`);
         const action = await vscode.window.showInformationMessage(
             'ИИ-модель устарела: вышла новая версия модели.',
             'Обновить',
             'Позже');
         if (action === 'Обновить') {
+            output.appendLine('Full line completion: model update requested.');
             await runFullLineOperation(() => applyFullLineState(context, output, { install: true }));
+            output.appendLine('Full line completion: model update finished.');
+        } else {
+            output.appendLine('Full line completion: model update postponed.');
         }
+    } else {
+        output.appendLine('Full line completion: model is up to date.');
     }
 
     trackModelWarmup(installDir, output);
