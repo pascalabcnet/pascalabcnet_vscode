@@ -108,7 +108,8 @@ export function getPluginDeployPath(installDir: string): string {
 
 export function readSetupConfig(installDir: string): FullLineSetupConfig | undefined {
     try {
-        return JSON.parse(fs.readFileSync(getConfigPath(installDir), 'utf8')) as FullLineSetupConfig;
+        return normalizeKeys(
+            JSON.parse(fs.readFileSync(getConfigPath(installDir), 'utf8'))) as FullLineSetupConfig;
     } catch {
         return undefined;
     }
@@ -116,11 +117,22 @@ export function readSetupConfig(installDir: string): FullLineSetupConfig | undef
 
 export function readServerState(installDir: string): LlamaServerState | undefined {
     try {
-        return JSON.parse(
-            fs.readFileSync(path.join(installDir, STATE_FILE_NAME), 'utf8')) as LlamaServerState;
+        return normalizeKeys(JSON.parse(
+            fs.readFileSync(path.join(installDir, STATE_FILE_NAME), 'utf8'))) as unknown as LlamaServerState;
     } catch {
         return undefined;
     }
+}
+
+// The setup tool and the plugin write JSON with default System.Text.Json
+// naming (PascalCase: "Port", "ModelPath", ...); TypeScript reads camelCase.
+// Normalizing keys once at read keeps the mismatch out of every call site.
+function normalizeKeys(value: unknown): Record<string, unknown> {
+    const normalized: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+        normalized[key.charAt(0).toLowerCase() + key.slice(1)] = item;
+    }
+    return normalized;
 }
 
 export function isInstalled(installDir: string): boolean {
@@ -258,6 +270,10 @@ export async function waitForModelReady(
         state = readServerState(installDir);
     }
     if (!state) {
+        return false;
+    }
+    if (!state.port) {
+        // Never poll with an undefined port: http.get would default to 80.
         return false;
     }
     const deadline = Date.now() + HEALTH_TIMEOUT_MS;
