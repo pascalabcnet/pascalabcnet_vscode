@@ -170,25 +170,41 @@ export function removeLegacyPluginCopy(context: vscode.ExtensionContext): void {
     }
 }
 
-export function stopLlamaServer(installDir: string): void {
-    const state = readServerState(installDir);
-    if (state) {
-        try {
-            process.kill(state.pid);
-        } catch {
-            // The process is already gone.
-        }
-    }
+export async function stopLlamaServer(installDir: string): Promise<void> {
+    const pid = readServerState(installDir)?.pid;
     try {
         fs.rmSync(path.join(installDir, STATE_FILE_NAME), { force: true });
     } catch {
         // Nothing to clean up.
     }
+    if (!pid) {
+        return;
+    }
+    try {
+        process.kill(pid);
+    } catch {
+        // The process is already gone.
+    }
+    // The exe stays locked for a moment after kill(); deleting or replacing it
+    // right away fails with EPERM on Windows.
+    for (let attempt = 0; attempt < 20; attempt++) {
+        try {
+            process.kill(pid, 0);
+            await delay(250);
+        } catch {
+            return;
+        }
+    }
 }
 
-export function removeComponents(installDir: string): void {
-    stopLlamaServer(installDir);
-    fs.rmSync(installDir, { recursive: true, force: true });
+export async function removeComponents(installDir: string): Promise<void> {
+    await stopLlamaServer(installDir);
+    fs.rmSync(installDir, {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 300
+    });
 }
 
 export interface SetupRunOptions {

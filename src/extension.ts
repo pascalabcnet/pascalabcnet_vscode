@@ -1956,7 +1956,7 @@ async function setFullLineEnabled(enabled: boolean): Promise<void> {
     );
 }
 
-async function restartLanguageServer(context: vscode.ExtensionContext): Promise<void> {
+async function stopLanguageServer(context: vscode.ExtensionContext): Promise<void> {
     const client = languageClient;
     languageClient = undefined;
     if (client?.needsStop()) {
@@ -1966,6 +1966,10 @@ async function restartLanguageServer(context: vscode.ExtensionContext): Promise<
             getLanguageServerOutput(context).error(`Language server stop failed: ${String(error)}`);
         }
     }
+}
+
+async function restartLanguageServer(context: vscode.ExtensionContext): Promise<void> {
+    await stopLanguageServer(context);
     startLanguageServer(context);
 }
 
@@ -2048,8 +2052,13 @@ async function applyFullLineState(
             }
             return;
         }
+        // Setup переизвлекает файлы llama.cpp и перекладывает dll — оба заняты
+        // работающим сервером и его плагином, сначала остановим их.
+        await stopLanguageServer(context);
+        await fullline.stopLlamaServer(installDir);
         installed = await installFullLineComponents(context, output);
         if (!installed) {
+            startLanguageServer(context);
             return;
         }
     } else {
@@ -2184,10 +2193,21 @@ async function removeFullLineComponents(
         return;
     }
     output.appendLine(`Removing full line completion runtime: ${installDir}`);
-    fullline.removeComponents(installDir);
-    if (languageClient?.isRunning()) {
-        await restartLanguageServer(context);
+    // Сначала останавливаем LSP-сервер: он держит dll плагина загруженной, а его
+    // плагин — процесс llama-server; без остановки удаление падает с EPERM.
+    await stopLanguageServer(context);
+    try {
+        await fullline.removeComponents(installDir);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        output.appendLine(`Removing failed: ${message}`);
+        void vscode.window.showErrorMessage(
+            `Не удалось удалить компоненты: ${message} ` +
+            'Повторить: палитра команд → «ИИ-дополнение — удалить компоненты».');
+        startLanguageServer(context);
+        return;
     }
+    startLanguageServer(context);
     void vscode.window.showInformationMessage('Компоненты ИИ-дополнения удалены.');
 }
 
@@ -2196,7 +2216,7 @@ async function restartModelServer(
     output: vscode.OutputChannel
 ): Promise<void> {
     const installDir = fullline.getInstallDir();
-    fullline.stopLlamaServer(installDir);
+    await fullline.stopLlamaServer(installDir);
     await restartLanguageServer(context);
     trackModelWarmup(installDir, output);
     void vscode.window.showInformationMessage('Сервер моделей перезапущен.');
