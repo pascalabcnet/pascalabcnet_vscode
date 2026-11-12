@@ -27,6 +27,11 @@ let compilationInProgress = false;
 let compilationGeneration = 0;
 let lastPascalDocumentUri: vscode.Uri | undefined;
 let languageServerOutput: vscode.LogOutputChannel | undefined;
+// Per-client registrations (NuGet commands, providers, notifications) are
+// disposed and re-created together with the language client; keeping them in
+// context.subscriptions made every restart re-register commands, which threw
+// and left the window without a language server.
+let languageServerExtras: vscode.Disposable[] = [];
 let fullLineOperation: Promise<unknown> = Promise.resolve();
 
 type CompilerTarget = 'net-framework' | 'net10';
@@ -1703,6 +1708,10 @@ class FilteredServerOutput implements vscode.OutputChannel {
 
 function startLanguageServer(context: vscode.ExtensionContext): void {
     const output = getLanguageServerOutput(context);
+    for (const disposable of languageServerExtras) {
+        disposable.dispose();
+    }
+    languageServerExtras = [];
 
     let serverPath: string;
     try {
@@ -1839,11 +1848,11 @@ function startLanguageServer(context: vscode.ExtensionContext): void {
         serverOptions,
         clientOptions
     );
-    registerNuGet(context, client);
+    languageServerExtras.push(registerNuGet(client));
 
     // Full line completion: forwarded to the language server, whose plugins
     // provide the suggestion text (pascalabc/inlineCompletion request).
-    context.subscriptions.push(
+    languageServerExtras.push(
         vscode.languages.registerInlineCompletionItemProvider(
             { language: 'pascalabc' },
             {
@@ -1859,24 +1868,29 @@ function startLanguageServer(context: vscode.ExtensionContext): void {
                     if (!client.isRunning()) {
                         return { items: [] };
                     }
-                    const result = await client.sendRequest<{
-                        items?: { insertText?: string }[];
-                    }>('pascalabc/inlineCompletion', {
-                        textDocument: { uri: document.uri.toString() },
-                        position: { line: position.line, character: position.character }
-                    }, token);
-                    return {
-                        items: (result?.items ?? [])
-                            .map((item: { insertText?: string }) => item.insertText)
-                            .filter((text): text is string => typeof text === 'string' && text.length > 0)
-                            .map((text: string) => new vscode.InlineCompletionItem(text))
-                    };
+                    try {
+                        const result = await client.sendRequest<{
+                            items?: { insertText?: string }[];
+                        }>('pascalabc/inlineCompletion', {
+                            textDocument: { uri: document.uri.toString() },
+                            position: { line: position.line, character: position.character }
+                        }, token);
+                        return {
+                            items: (result?.items ?? [])
+                                .map((item: { insertText?: string }) => item.insertText)
+                                .filter((text): text is string => typeof text === 'string' && text.length > 0)
+                                .map((text: string) => new vscode.InlineCompletionItem(text))
+                        };
+                    } catch (error) {
+                        output.error(`[fullline] inline completion request failed: ${String(error)}`);
+                        return { items: [] };
+                    }
                 }
             }
         )
     );
 
-    context.subscriptions.push(
+    languageServerExtras.push(
         vscode.workspace.registerTextDocumentContentProvider('pascalabc-metadata', {
             provideTextDocumentContent: async (uri, token) => {
                 const { document } = await getMetadata(uri, token);
@@ -1892,7 +1906,7 @@ function startLanguageServer(context: vscode.ExtensionContext): void {
         })
     );
 
-    context.subscriptions.push(client.onDidChangeState(event => {
+    languageServerExtras.push(client.onDidChangeState(event => {
         if (event.newState === State.Stopped) {
             metadataDocuments.clear();
         }

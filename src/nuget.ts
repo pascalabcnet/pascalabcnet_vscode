@@ -5,7 +5,7 @@ interface PackageSuggestion { Id: string; Version: string; Description?: string;
 interface RestoreResult { Success: boolean; Message?: string; }
 interface RestoreProgress { operationId: string; stage: string; packageId: string; installedCount: number; cancelled: boolean; }
 
-export function registerNuGet(context: vscode.ExtensionContext, client: LanguageClient): void {
+export function registerNuGet(client: LanguageClient): vscode.Disposable {
     const output = vscode.window.createOutputChannel('PascalABC.NET NuGet');
     const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 20);
     status.text = '$(cloud-download) NuGet: Восстановить';
@@ -64,7 +64,7 @@ export function registerNuGet(context: vscode.ExtensionContext, client: Language
         if (!await vscode.workspace.applyEdit(edit)) { throw new Error('Could not add the package directive.'); }
         await vscode.window.showTextDocument(document);
     }
-    context.subscriptions.push(output, status,
+    return vscode.Disposable.from(output, status,
         client.onDidChangeState(event => {
             if (event.newState === State.Stopped) { required.clear(); status.hide(); }
         }),
