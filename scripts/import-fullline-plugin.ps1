@@ -90,12 +90,24 @@ foreach ($project in @($pluginProject, $setupProject)) {
     }
 }
 
+# Контракты в сабмодуле pascalabcnet — dual-target проекты (net472;net10.0), и
+# без глобальных свойств ниже Directory.Build.props сворачивает их в net472:
+# отсюда NU1702 и ссылки на legacy-сборку. Набор свойств повторяет
+# канонический вызов сборки основной репы (см. build-pitfalls).
+$buildProperties = @('-p:TargetFramework=net10.0', '-p:PABCNET_LEGACY_ONLY=false', '-m:1')
+
+Write-Host '=== Restoring full line completion projects ==='
+& dotnet restore $pluginProject -p:PABCNET_LEGACY_ONLY=false --force
+if ($LASTEXITCODE -ne 0) {
+    throw "Restore failed with exit code $LASTEXITCODE."
+}
+
 Write-Host '=== Building full line completion plugin and setup ==='
-& dotnet build $pluginProject -c $Configuration --nologo -v minimal
+& dotnet build $pluginProject -c $Configuration --nologo -v minimal @buildProperties
 if ($LASTEXITCODE -ne 0) {
     throw "Plugin build failed with exit code $LASTEXITCODE."
 }
-& dotnet build $setupProject -c $Configuration --nologo -v minimal
+& dotnet build $setupProject -c $Configuration --nologo -v minimal @buildProperties
 if ($LASTEXITCODE -ne 0) {
     throw "Setup build failed with exit code $LASTEXITCODE."
 }
