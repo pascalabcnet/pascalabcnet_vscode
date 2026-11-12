@@ -33,6 +33,9 @@ let languageServerOutput: vscode.LogOutputChannel | undefined;
 // and left the window without a language server.
 let languageServerExtras: vscode.Disposable[] = [];
 let fullLineOperation: Promise<unknown> = Promise.resolve();
+// Set while applyFullLineState itself flips the enabled setting, so the
+// configuration listener does not run a second, redundant apply cycle.
+let suppressConfigApply = false;
 
 type CompilerTarget = 'net-framework' | 'net10';
 
@@ -1970,23 +1973,19 @@ function registerFullLineCompletion(
     context: vscode.ExtensionContext,
     output: vscode.OutputChannel
 ): void {
-    const applyState = (options: { install?: boolean } = {}) =>
+    const applyState = (options: { install?: boolean; enable?: boolean } = {}) =>
         runFullLineOperation(() => applyFullLineState(context, output, options));
 
     context.subscriptions.push(
         vscode.commands.registerCommand('pascalabc.fullLineCompletion.toggle', async () => {
             await setFullLineEnabled(!fullline.getFullLineSettings().enabled);
         }),
-        vscode.commands.registerCommand('pascalabc.fullLineCompletion.install', async () => {
-            if (!fullline.getFullLineSettings().enabled) {
-                // Flipping the setting triggers the install flow below.
-                await setFullLineEnabled(true);
-                return;
-            }
-            await applyState({ install: true });
-        }),
+        // «Установить компоненты» всегда ведёт через установку/переустановку
+        // (с подтверждением) и включает фичу — какова бы ни была галочка.
+        vscode.commands.registerCommand('pascalabc.fullLineCompletion.install', () =>
+            applyState({ install: true, enable: true })),
         vscode.commands.registerCommand('pascalabc.fullLineCompletion.update', () =>
-            applyState({ install: true })),
+            applyState({ install: true, enable: true })),
         vscode.commands.registerCommand('pascalabc.fullLineCompletion.remove', () =>
             runFullLineOperation(() => removeFullLineComponents(context, output))),
         vscode.commands.registerCommand('pascalabc.fullLineCompletion.restartServer', () =>
@@ -1999,6 +1998,9 @@ function registerFullLineCompletion(
             if (!event.affectsConfiguration('pascalabc.fullLineCompletion.enabled')) {
                 return;
             }
+            if (suppressConfigApply) {
+                return;
+            }
             void applyState();
         })
     );
@@ -2009,8 +2011,18 @@ function registerFullLineCompletion(
 async function applyFullLineState(
     context: vscode.ExtensionContext,
     output: vscode.OutputChannel,
-    options: { install?: boolean }
+    options: { install?: boolean; enable?: boolean }
 ): Promise<void> {
+    if (options.enable && !fullline.getFullLineSettings().enabled) {
+        // «Установить/обновить» включает фичу сама; слушатель настройки на этот
+        // момент не должен запускать собственный цикл применения.
+        suppressConfigApply = true;
+        try {
+            await setFullLineEnabled(true);
+        } finally {
+            suppressConfigApply = false;
+        }
+    }
     const settings = fullline.getFullLineSettings();
     const installDir = fullline.getInstallDir();
 
@@ -2032,7 +2044,7 @@ async function applyFullLineState(
                 await setFullLineEnabled(false);
                 void vscode.window.showInformationMessage(
                     'ИИ-дополнение строк не установлено. Повторить: палитра команд → ' +
-                    '«ИИ-дополнение строк — включить/выключить» или галочка в настройках.');
+                    '«ИИ-дополнение — включить/выключить» или галочка в настройках.');
             }
             return;
         }
