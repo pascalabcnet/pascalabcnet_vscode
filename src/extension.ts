@@ -2131,15 +2131,10 @@ async function checkFullLineOnStartup(
     const installDir = fullline.getInstallDir();
 
     if (!fullline.isInstalled(installDir)) {
-        const action = await vscode.window.showInformationMessage(
-            'ИИ-дополнение строк PascalABC.NET требует установки компонентов (llama.cpp и модель).',
-            'Установить',
-            'Выключить');
-        if (action === 'Установить') {
-            await applyFullLineState(context, output, { install: true });
-        } else if (action === 'Выключить') {
-            await setFullLineEnabled(false);
-        }
+        // «Включено, но не установлено» — доводим до разрешения тем же модальным
+        // диалогом установки, что и при включении галочки: окно не должно
+        // исчезать незамеченным (обычное уведомление легко пропустить).
+        await applyFullLineState(context, output, {});
         return;
     }
 
