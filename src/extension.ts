@@ -449,7 +449,8 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     startLanguageServer(context);
-    registerFullLineCompletion(context, output);
+    // Логи установки/обновления ИИ-дополнения идут в канал Language Server.
+    registerFullLineCompletion(context, getLanguageServerOutput(context));
 
     context.subscriptions.push(
         vscode.window.onDidCloseTerminal(terminal => {
@@ -1647,6 +1648,59 @@ function getLanguageServerOutput(context: vscode.ExtensionContext): vscode.LogOu
     return output;
 }
 
+// The language client logs every server process exit as an error — including
+// the planned stop() when we restart the server. Exit code 0 is by definition
+// our own graceful shutdown (a crash cannot exit 0), so that single line is
+// filtered out to avoid a false "the server fell" alarm; other codes and
+// signals stay visible.
+class FilteredServerOutput implements vscode.OutputChannel {
+    public constructor(private readonly channel: vscode.OutputChannel) {
+    }
+
+    public get name(): string {
+        return this.channel.name;
+    }
+
+    public append(value: string): void {
+        if (!value.includes('Server process exited with code 0')) {
+            this.channel.append(value);
+        }
+    }
+
+    public appendLine(value: string): void {
+        if (!value.includes('Server process exited with code 0')) {
+            this.channel.appendLine(value);
+        }
+    }
+
+    public replace(value: string): void {
+        if (!value.includes('Server process exited with code 0')) {
+            this.channel.replace(value);
+        }
+    }
+
+    public clear(): void {
+        this.channel.clear();
+    }
+
+    public show(
+        columnOrPreserveFocus?: vscode.ViewColumn | boolean,
+        preserveFocus?: boolean
+    ): void {
+        (this.channel.show as (a?: unknown, b?: boolean) => void)(
+            columnOrPreserveFocus,
+            preserveFocus);
+    }
+
+    public hide(): void {
+        this.channel.hide();
+    }
+
+    public dispose(): void {
+        this.channel.dispose();
+    }
+}
+
 function startLanguageServer(context: vscode.ExtensionContext): void {
     const output = getLanguageServerOutput(context);
 
@@ -1741,7 +1795,7 @@ function startLanguageServer(context: vscode.ExtensionContext): void {
     const clientOptions: LanguageClientOptions = {
         initializationOptions: { manualNuGetRestore: true },
         documentSelector: [{ language: 'pascalabc' }],
-        outputChannel: output,
+        outputChannel: new FilteredServerOutput(output),
         diagnosticCollectionName: 'pascalabc-language-server',
         middleware: {
             provideDefinition: async (document, position, token, next) =>
@@ -1986,19 +2040,35 @@ async function applyFullLineState(
     trackModelWarmup(installDir, output);
 }
 
+// Модальные диалоги показывают собственную кнопку отмены в языке интерфейса
+// VS Code — подписи наших кнопок и тексты подбираем под тот же язык, чтобы
+// русская кнопка не стояла рядом с английским Cancel.
+function isRussianUi(): boolean {
+    return vscode.env.language.toLowerCase().startsWith('ru');
+}
+
 async function confirmFullLineInstall(alreadyInstalled: boolean): Promise<boolean> {
+    const russian = isRussianUi();
+    const acceptLabel = alreadyInstalled
+        ? (russian ? 'Переустановить' : 'Reinstall')
+        : (russian ? 'Установить' : 'Install');
     const message = alreadyInstalled
-        ? 'Переустановить компоненты ИИ-дополнения строк (llama.cpp и модель)?'
-        : 'ИИ-дополнение строк требует установки компонентов: llama.cpp и модель ИИ ' +
-            '(скачивание может занять несколько гигабайт). Установить?';
+        ? (russian
+            ? 'Переустановить компоненты ИИ-дополнения строк (llama.cpp и модель)?'
+            : 'Reinstall the AI full-line completion components (llama.cpp and the model)?')
+        : (russian
+            ? 'ИИ-дополнение строк требует установки компонентов: llama.cpp и модель ИИ ' +
+                '(скачивание может занять несколько гигабайт). Установить?'
+            : 'AI full-line completion needs its components installed: llama.cpp and the AI ' +
+                'model (the download may take several gigabytes). Install?');
     // Модальное окно: обычная панель уведомлений может закрыться незамеченной,
     // и тогда установка молча не запустится. Кнопку «Отмена» не добавляем —
     // модальный диалог VS Code показывает собственную (и крестик).
     const action = await vscode.window.showWarningMessage(
         message,
         { modal: true },
-        alreadyInstalled ? 'Переустановить' : 'Установить');
-    return action === 'Установить' || action === 'Переустановить';
+        acceptLabel);
+    return action === acceptLabel;
 }
 
 
@@ -2075,11 +2145,16 @@ async function removeFullLineComponents(
         void vscode.window.showInformationMessage('Компоненты ИИ-дополнения не установлены.');
         return;
     }
+    const russian = isRussianUi();
+    const removeLabel = russian ? 'Удалить' : 'Remove';
     const action = await vscode.window.showWarningMessage(
-        'Удалить llama.cpp и модель ИИ с диска? Каталог общий для всех хостов PascalABC.NET.',
+        russian
+            ? 'Удалить llama.cpp и модель ИИ с диска? Каталог общий для всех хостов PascalABC.NET.'
+            : 'Remove llama.cpp and the AI model from disk? The directory is shared by all ' +
+                'PascalABC.NET hosts.',
         { modal: true },
-        'Удалить');
-    if (action !== 'Удалить') {
+        removeLabel);
+    if (action !== removeLabel) {
         return;
     }
     output.appendLine(`Removing full line completion runtime: ${installDir}`);
