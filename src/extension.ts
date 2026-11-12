@@ -2073,11 +2073,11 @@ async function applyFullLineState(
     trackModelWarmup(installDir, output);
 }
 
-// Модальные диалоги показывают собственную кнопку отмены в языке интерфейса
-// VS Code — подписи наших кнопок и тексты подбираем под тот же язык, чтобы
-// русская кнопка не стояла рядом с английским Cancel.
+// Тексты расширения сейчас по-русски (уведомления и так захардкожены), поэтому
+// и модальные тексты — тоже русские, чтобы интерфейс был консистентным.
+// Позже: честная локализация через vscode.env.language + nls-строки.
 function isRussianUi(): boolean {
-    return vscode.env.language.toLowerCase().startsWith('ru');
+    return true;
 }
 
 async function confirmFullLineInstall(alreadyInstalled: boolean): Promise<boolean> {
