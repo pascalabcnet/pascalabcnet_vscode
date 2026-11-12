@@ -262,26 +262,21 @@ export async function waitForModelReady(
     installDir: string,
     onMessage?: (message: string) => void
 ): Promise<boolean> {
-    // The plugin writes llama-server-state.json right after spawning the server.
-    const stateDeadline = Date.now() + 30_000;
-    let state = readServerState(installDir);
-    while (!state && Date.now() < stateDeadline) {
-        await delay(500);
-        state = readServerState(installDir);
-    }
-    if (!state) {
-        return false;
-    }
-    if (!state.port) {
-        // Never poll with an undefined port: http.get would default to 80.
-        return false;
-    }
+    // The state file is re-read on every poll: it can still hold the previous
+    // session's llama-server when waiting starts, and the plugin rewrites it
+    // only after spawning a new one. Latching onto the stale port once would
+    // poll a dead server until the timeout.
     const deadline = Date.now() + HEALTH_TIMEOUT_MS;
     while (Date.now() < deadline) {
-        if (await isHealthReady(state.port)) {
-            return true;
+        const state = readServerState(installDir);
+        if (state?.port) {
+            if (await isHealthReady(state.port)) {
+                return true;
+            }
+            onMessage?.(`ИИ-модель загружается (llama-server, порт ${state.port})...`);
+        } else {
+            onMessage?.('ИИ-модель загружается (llama-server запускается)...');
         }
-        onMessage?.(`ИИ-модель загружается (llama-server, порт ${state.port})...`);
         await delay(1000);
     }
     return false;

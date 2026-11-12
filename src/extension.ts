@@ -2192,6 +2192,11 @@ function trackModelWarmup(installDir: string, output: vscode.OutputChannel): voi
                 void vscode.window.setStatusBarMessage(
                     '$(warning) ИИ-модель не загрузилась', 8000);
             }
+        }, () => {
+            // The spinner must clear even if tracking failed.
+            output.appendLine('Model warm-up tracking failed.');
+            void vscode.window.setStatusBarMessage(
+                '$(warning) Не удалось определить готовность модели', 8000);
         }));
 }
 
