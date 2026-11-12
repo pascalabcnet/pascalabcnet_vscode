@@ -2063,7 +2063,7 @@ async function applyFullLineState(
         try {
             // Extension updates replace the VSIX folder; keep the deployed dll
             // in sync with the bundled one.
-            fullline.deployPluginDll(context, installDir);
+            await fullline.deployPluginDll(context, installDir);
         } catch (error) {
             output.appendLine(`Plugin redeploy skipped: ${String(error)}`);
         }
@@ -2125,7 +2125,7 @@ async function installFullLineComponents(
             },
             async (progress, token) => {
                 progress.report({ message: 'Развёртывание плагина LSP...' });
-                fullline.deployPluginDll(context, installDir);
+                await fullline.deployPluginDll(context, installDir);
                 let stageMessage = 'Установка компонентов';
                 await fullline.runSetup(
                     context,
@@ -2253,7 +2253,7 @@ async function checkFullLineOnStartup(
 
     try {
         // Cheap local consistency check; also refreshes the dll after updates.
-        fullline.deployPluginDll(context, installDir);
+        await fullline.deployPluginDll(context, installDir);
     } catch (error) {
         output.appendLine(`Plugin redeploy skipped: ${String(error)}`);
     }

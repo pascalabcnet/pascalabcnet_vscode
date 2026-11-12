@@ -141,16 +141,32 @@ export function isInstalled(installDir: string): boolean {
 
 // The plugin dll ships inside the VSIX (bundle approach) and is copied into the
 // persistent install directory; re-copying keeps it in sync with extension
-// updates. Works only while the language server does not hold the dll open.
-export function deployPluginDll(context: vscode.ExtensionContext, installDir: string): void {
+// updates. The copy retries: right after the language server stops, Windows
+// still holds the deployed dll open for a moment (dying process, antivirus),
+// and a single copy attempt fails with EBUSY.
+export async function deployPluginDll(context: vscode.ExtensionContext, installDir: string): Promise<void> {
     const bundlePath = context.asAbsolutePath(path.join('fullline', PLUGIN_DLL_NAME));
     if (!fs.existsSync(bundlePath)) {
         throw new Error(`Bundled plugin was not found: ${bundlePath}`);
     }
     const targetPath = getPluginDeployPath(installDir);
     fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-    fs.copyFileSync(bundlePath, targetPath);
+    await copyWithRetries(bundlePath, targetPath);
     removeLegacyPluginCopy(context);
+}
+
+async function copyWithRetries(sourcePath: string, targetPath: string): Promise<void> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 20; attempt++) {
+        try {
+            fs.copyFileSync(sourcePath, targetPath);
+            return;
+        } catch (error) {
+            lastError = error;
+            await delay(250);
+        }
+    }
+    throw lastError;
 }
 
 // A dll left in the server's default plugins folder (bin/net10/plugins, the
