@@ -366,16 +366,6 @@
           "default": false,
           "description": "Show AI full-line completion suggestions (inline ghost text). Enabling installs the full line completion components (llama.cpp + model) on first use."
         },
-        "pascalabc.fullLineCompletion.modelUrl": {
-          "type": "string",
-          "default": "https://huggingface.co/PascalABCNET/Qwen-Coder-1.5B_Q4_K_M_full_line_completion/resolve/0335a690e63d4c499b225b84690f6627d4b36b6b/completion_qwen_pascal_q4_k_m.gguf",
-          "description": "URL of the .gguf completion model to install (Hugging Face resolve link pinned to a revision). If empty, the install flow asks for it."
-        },
-        "pascalabc.fullLineCompletion.modelRevision": {
-          "type": "string",
-          "default": "0335a690e63d4c499b225b84690f6627d4b36b6b",
-          "description": "Model revision recorded for version checks (the Hugging Face commit hash the model URL is pinned to)."
-        },
         "pascalabc.fullLineCompletion.device": {
           "type": "string",
           "enum": [

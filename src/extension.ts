@@ -1963,7 +1963,8 @@ async function applyFullLineState(
             if (!installed) {
                 await setFullLineEnabled(false);
                 void vscode.window.showInformationMessage(
-                    'ИИ-дополнение строк не установлено. Включить его можно позже в настройках.');
+                    'ИИ-дополнение строк не установлено. Повторить: палитра команд → ' +
+                    '«ИИ-дополнение строк — включить/выключить» или галочка в настройках.');
             }
             return;
         }
@@ -1990,16 +1991,16 @@ async function confirmFullLineInstall(alreadyInstalled: boolean): Promise<boolea
         ? 'Переустановить компоненты ИИ-дополнения строк (llama.cpp и модель)?'
         : 'ИИ-дополнение строк требует установки компонентов: llama.cpp и модель ИИ ' +
             '(скачивание может занять несколько гигабайт). Установить?';
-    const action = await vscode.window.showInformationMessage(
+    // Модальное окно: обычная панель уведомлений может закрыться незамеченной,
+    // и тогда установка молча не запустится.
+    const action = await vscode.window.showWarningMessage(
         message,
+        { modal: true },
         alreadyInstalled ? 'Переустановить' : 'Установить',
         'Отмена');
     return action === 'Установить' || action === 'Переустановить';
 }
 
-interface FullLineSourcePickItem extends vscode.QuickPickItem {
-    action: 'url' | 'none';
-}
 
 async function installFullLineComponents(
     context: vscode.ExtensionContext,
@@ -2007,42 +2008,9 @@ async function installFullLineComponents(
 ): Promise<boolean> {
     const installDir = fullline.getInstallDir();
     const settings = fullline.getFullLineSettings();
-
-    let modelUrl = settings.modelUrl;
-    if (!modelUrl) {
-        const source = await vscode.window.showQuickPick<FullLineSourcePickItem>(
-            [
-                {
-                    label: 'Ввести URL модели (Hugging Face)',
-                    description: 'Ссылка на .gguf файл модели',
-                    action: 'url'
-                },
-                {
-                    label: 'Установить без модели',
-                    description: 'Только llama.cpp; подсказки работать не будут',
-                    action: 'none'
-                }
-            ],
-            { title: 'ИИ-дополнение строк: источник модели' });
-        if (!source) {
-            return false;
-        }
-        if (source.action === 'url') {
-            const entered = await vscode.window.showInputBox({
-                title: 'URL модели (Hugging Face)',
-                prompt: 'Например: https://huggingface.co/<repo>/resolve/<revision>/<file>.gguf',
-                ignoreFocusOut: true
-            });
-            if (!entered?.trim()) {
-                return false;
-            }
-            modelUrl = entered.trim();
-            await vscode.workspace.getConfiguration('pascalabc').update(
-                'fullLineCompletion.modelUrl',
-                modelUrl,
-                vscode.ConfigurationTarget.Global);
-        }
-    }
+    // Источник модели закреплён за релизом расширения (см. fullline.ts) —
+    // отдельной настройки для пользователя нет.
+    const modelUrl = fullline.resolveModelUrl();
 
     const dotnet = resolveDotnetExecutable();
     try {
@@ -2063,7 +2031,7 @@ async function installFullLineComponents(
                     {
                         device: settings.device,
                         modelUrl,
-                        modelRevision: settings.modelRevision
+                        modelRevision: fullline.RECOMMENDED_MODEL_REVISION
                     },
                     event => {
                         if (event.event === 'stage' && event.message) {
@@ -2088,7 +2056,9 @@ async function installFullLineComponents(
         const message = error instanceof Error ? error.message : String(error);
         output.appendLine(`Full line completion setup failed: ${message}`);
         output.show(true);
-        void vscode.window.showErrorMessage(`Не удалось установить ИИ-дополнение строк: ${message}`);
+        void vscode.window.showErrorMessage(
+            `Не удалось установить ИИ-дополнение строк: ${message} ` +
+            'Повторить: палитра команд → «ИИ-дополнение — установить компоненты».');
         return false;
     }
 
@@ -2180,11 +2150,12 @@ async function checkFullLineOnStartup(
         output.appendLine(`Plugin redeploy skipped: ${String(error)}`);
     }
 
-    // Model version check against the configured source (cheap, local).
+    // Model version check against the recommended revision (cheap, local).
     const config = fullline.readSetupConfig(installDir);
-    if (config?.modelUrl && settings.modelUrl && config.modelUrl !== settings.modelUrl) {
+    const recommendedUrl = fullline.resolveModelUrl();
+    if (config?.modelUrl && config.modelUrl !== recommendedUrl) {
         const action = await vscode.window.showInformationMessage(
-            'ИИ-модель устарела: в настройках указан другой источник модели.',
+            'ИИ-модель устарела: вышла новая версия модели.',
             'Обновить',
             'Позже');
         if (action === 'Обновить') {

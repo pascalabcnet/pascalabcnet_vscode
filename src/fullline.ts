@@ -50,8 +50,6 @@ export interface SetupProgress {
 
 export interface FullLineSettings {
     enabled: boolean;
-    modelUrl: string;
-    modelRevision: string;
     device: string;
 }
 
@@ -69,10 +67,20 @@ export function getFullLineSettings(): FullLineSettings {
     const configuration = vscode.workspace.getConfiguration('pascalabc');
     return {
         enabled: configuration.get<boolean>('fullLineCompletion.enabled', false),
-        modelUrl: configuration.get<string>('fullLineCompletion.modelUrl', '').trim(),
-        modelRevision: configuration.get<string>('fullLineCompletion.modelRevision', '').trim(),
         device: configuration.get<string>('fullLineCompletion.device', 'auto')
     };
+}
+
+// The recommended model is an implementation detail pinned to a Hugging Face
+// revision and updated with each extension release — deliberately not a user
+// setting. For development PABC_FULLLINE_MODEL_URL overrides the URL.
+export const RECOMMENDED_MODEL_URL =
+    'https://huggingface.co/PascalABCNET/Qwen-Coder-1.5B_Q4_K_M_full_line_completion' +
+    '/resolve/0335a690e63d4c499b225b84690f6627d4b36b6b/completion_qwen_pascal_q4_k_m.gguf';
+export const RECOMMENDED_MODEL_REVISION = '0335a690e63d4c499b225b84690f6627d4b36b6b';
+
+export function resolveModelUrl(): string {
+    return (process.env.PABC_FULLLINE_MODEL_URL ?? '').trim() || RECOMMENDED_MODEL_URL;
 }
 
 // Must match the FullLineCompletionSetup default install directory
