@@ -150,6 +150,24 @@ export function deployPluginDll(context: vscode.ExtensionContext, installDir: st
     const targetPath = getPluginDeployPath(installDir);
     fs.mkdirSync(path.dirname(targetPath), { recursive: true });
     fs.copyFileSync(bundlePath, targetPath);
+    removeLegacyPluginCopy(context);
+}
+
+// A dll left in the server's default plugins folder (bin/net10/plugins, the
+// old manual test loop) is loaded BEFORE the managed copy and shadows it —
+// the server only uses the first registered provider. Remove the stray copy so
+// the deployed one is the single source of truth.
+export function removeLegacyPluginCopy(context: vscode.ExtensionContext): void {
+    const legacyPath = context.asAbsolutePath(
+        path.join('bin', 'net10', 'plugins', PLUGIN_DLL_NAME));
+    try {
+        if (fs.existsSync(legacyPath)) {
+            fs.rmSync(legacyPath, { force: true });
+            console.log(`Removed legacy plugin copy: ${legacyPath}`);
+        }
+    } catch {
+        // Best effort: a locked dll stays until the next restart.
+    }
 }
 
 export function stopLlamaServer(installDir: string): void {
