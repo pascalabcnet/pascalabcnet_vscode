@@ -269,7 +269,7 @@
       },
       {
         "command": "pascalabc.fullLineCompletion.toggle",
-        "title": "PascalABC.NET: ИИ-дополнение строк — включить/выключить"
+        "title": "PascalABC.NET: ИИ-дополнение — включить/выключить"
       },
       {
         "command": "pascalabc.fullLineCompletion.install",
