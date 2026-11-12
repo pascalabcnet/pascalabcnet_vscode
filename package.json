@@ -34,7 +34,7 @@
   "contributes": {
     "configurationDefaults": {
       "[pascalabc]": {
-        "editor.inlineSuggest.enabled": false,
+        "editor.inlineSuggest.enabled": true,
         "editor.quickSuggestions": false
       },
       "editor.tokenColorCustomizations": {
@@ -266,6 +266,30 @@
         "command": "pascalabc.saveFile",
         "title": "PascalABC.NET: Save File",
         "icon": "$(save)"
+      },
+      {
+        "command": "pascalabc.fullLineCompletion.toggle",
+        "title": "PascalABC.NET: ИИ-дополнение строк — включить/выключить"
+      },
+      {
+        "command": "pascalabc.fullLineCompletion.install",
+        "title": "PascalABC.NET: ИИ-дополнение — установить компоненты"
+      },
+      {
+        "command": "pascalabc.fullLineCompletion.update",
+        "title": "PascalABC.NET: ИИ-дополнение — обновить компоненты"
+      },
+      {
+        "command": "pascalabc.fullLineCompletion.remove",
+        "title": "PascalABC.NET: ИИ-дополнение — удалить компоненты"
+      },
+      {
+        "command": "pascalabc.fullLineCompletion.restartServer",
+        "title": "PascalABC.NET: ИИ-дополнение — перезапустить сервер моделей"
+      },
+      {
+        "command": "pascalabc.fullLineCompletion.status",
+        "title": "PascalABC.NET: ИИ-дополнение — статус и диагностика"
       }
     ],
     "keybindings": [
@@ -336,6 +360,40 @@
           ],
           "default": "net-framework",
           "description": "Compiler runtime used for compilation and execution. On Linux and macOS, .NET 10 is always used."
+        },
+        "pascalabc.fullLineCompletion.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Show AI full-line completion suggestions (inline ghost text). Enabling installs the full line completion components (llama.cpp + model) on first use."
+        },
+        "pascalabc.fullLineCompletion.modelUrl": {
+          "type": "string",
+          "default": "",
+          "description": "URL of the .gguf completion model to install (e.g. a Hugging Face resolve link). If empty, the install flow asks for it."
+        },
+        "pascalabc.fullLineCompletion.modelRevision": {
+          "type": "string",
+          "default": "",
+          "description": "Model revision recorded for version checks (e.g. the Hugging Face commit hash)."
+        },
+        "pascalabc.fullLineCompletion.device": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "cpu",
+            "vulkan",
+            "cuda",
+            "metal"
+          ],
+          "enumDescriptions": [
+            "Discrete GPU > integrated GPU > CPU (GPUs use the Vulkan build)",
+            "CPU build of llama.cpp",
+            "Force the Vulkan build (any GPU)",
+            "Force the CUDA build (NVIDIA, opt-in)",
+            "Metal build (macOS)"
+          ],
+          "default": "auto",
+          "description": "Device class used when installing llama.cpp. Applied on the next install/update of the components."
         }
       }
     }
@@ -345,7 +403,8 @@
     "watch": "tsc -watch -p ./",
     "build:server": "powershell.exe -NoProfile -File ./scripts/build-server.ps1",
     "build": "npm run build:server && npm run compile",
-    "package": "powershell.exe -NoProfile -File ./scripts/build-vsix.ps1"
+    "package": "powershell.exe -NoProfile -File ./scripts/build-vsix.ps1",
+    "vscode:uninstall": "node ./uninstall.js"
   },
   "dependencies": {
     "vscode-languageclient": "9.0.1"
