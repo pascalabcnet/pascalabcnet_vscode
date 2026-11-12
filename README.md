@@ -184,6 +184,19 @@ scripts\build-vsix.cmd
 
 The package filename is derived from the extension name and version, for example `multitarget-pascalabc-net-0.6.0.vsix`. Generated files under `bin/`, `out/`, and `.build/` are intentionally not committed. Reproducing a package requires the pinned PascalABC.NET sources and the documented build environment.
 
+### Full line completion plugin in the package
+
+The AI full-line completion plugin lives in a separate repository,
+`pascalabcnet/pascalabcnet_full_line_completion`. The packaging step
+(`scripts/import-fullline-plugin.ps1`) builds it and stages the binaries into
+`fullline/` before `vsce package`:
+
+- a checkout of the plugin repository next to this one (a sibling
+  `pascalabcnet_full_line_completion` folder) is used when present;
+- otherwise the repository is cloned automatically into `.build/fullline-plugin`
+  at the revision listed in `scripts/fullline-plugin.ref` (set that file to a
+  release tag of the plugin repository for reproducible packages).
+
 ## Updating the Backend
 
 Update and verify `externals/pascalabcnet` deliberately, then record its gitlink
