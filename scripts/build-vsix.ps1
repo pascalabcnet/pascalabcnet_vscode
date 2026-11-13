@@ -51,6 +51,9 @@ try {
     & npm.cmd run compile
     Assert-LastExitCode 'TypeScript compilation'
 
+    Write-Host '=== Staging full line completion bundle ==='
+    & (Join-Path $PSScriptRoot 'import-fullline-plugin.ps1')
+
     Write-Host "=== Packaging $vsixName ==="
     & npx.cmd --yes '@vscode/vsce' package --out $vsixPath
     Assert-LastExitCode 'VSIX packaging'
