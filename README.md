@@ -110,6 +110,39 @@ an isolated user-data directory for tests.
 Compiler controllers and the language server always run from the extension's
 bundled runtime. External compiler/runtime paths are not supported.
 
+### AI full-line completion
+
+An opt-in AI feature: a local language model suggests the continuation of the
+current line or block as ghost text, accepted with `Tab`. Inference runs
+entirely on your machine (llama.cpp with a small PascalABC.NET-tuned model);
+nothing is sent to the network.
+
+Settings:
+
+- `pascalabc.fullLineCompletion.enabled` (default `false`) — show AI
+  suggestions. Turning it on for the first time offers to install the
+  components (llama.cpp and the model, several gigabytes) in a confirmation
+  dialog, then downloads them with a progress bar. The Command Palette
+  commands below write the same setting and behave identically.
+- `pascalabc.fullLineCompletion.device` (default `auto`) — device selection
+  for the model runtime (automatic, discrete/integrated GPU, CPU).
+
+Install policy: components are installed **outside the extension folder**, to
+`%LOCALAPPDATA%\PascalABC.NET\` — `llama.cpp\` holds the runtime and the
+model, `LspPlugins\` (next to it) holds the LSP plugin dll. Extension updates
+re-deploy the plugin automatically and never touch the installed model, so no
+reinstall is needed after updating. The model is versioned independently: when
+a new recommended model is published, the extension offers to update it at
+startup (updates never happen silently).
+
+Removal: **PascalABC.NET: ИИ-дополнение — удалить компоненты** removes the
+runtime and the model — note the directory is shared by all PascalABC.NET
+hosts on the machine. Uninstalling the extension removes the components on the
+next VS Code start; this hook runs only for uninstalls from the VS Code UI
+(after a terminal-based `code --uninstall-extension` run `uninstall.js`
+manually). Details of the design:
+[design doc](https://github.com/pascalabcnet/pascalabcnet_full_line_completion/blob/master/docs/design-fullline-completion.md).
+
 ## Source Code
 
 The complete extension source is available at [github.com/pascalabcnet/pascalabcnet_vscode](https://github.com/pascalabcnet/pascalabcnet_vscode). Issues can be reported through the repository's [issue tracker](https://github.com/pascalabcnet/pascalabcnet_vscode/issues).
@@ -219,6 +252,11 @@ code --install-extension .\multitarget-pascalabc-net-0.6.0.vsix
 | PascalABC.NET: Open Compilation Output Folder | — |
 | PascalABC.NET: Restart Compiler | — |
 | PascalABC.NET: Select Compiler Target | — |
+| PascalABC.NET: ИИ-дополнение — включить/выключить | — |
+| PascalABC.NET: ИИ-дополнение — установить компоненты | — |
+| PascalABC.NET: ИИ-дополнение — обновить компоненты | — |
+| PascalABC.NET: ИИ-дополнение — удалить компоненты | — |
+| PascalABC.NET: ИИ-дополнение — статус и диагностика | — |
 
 The keyboard shortcuts are active only for files with the `pascalabc` language identifier.
 
