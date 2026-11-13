@@ -158,23 +158,6 @@ export async function deployPluginDll(context: vscode.ExtensionContext, installD
     const targetPath = getPluginDeployPath(installDir);
     fs.mkdirSync(path.dirname(targetPath), { recursive: true });
     await copyWithRetries(bundlePath, targetPath);
-    removeLegacyPluginCopy(context);
-    removeLegacyPluginsDir(installDir);
-}
-
-// Before LspPlugins moved next to llama.cpp it lived inside it; servers and
-// tools that scan llama.cpp recursively could pick the dll up. Remove the old
-// copy once the new location is in place.
-function removeLegacyPluginsDir(installDir: string): void {
-    try {
-        const legacy = path.join(installDir, LSP_PLUGINS_DIR_NAME);
-        if (fs.existsSync(legacy)) {
-            fs.rmSync(legacy, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
-            console.log(`Removed legacy plugins directory: ${legacy}`);
-        }
-    } catch {
-        // Best effort: a locked dll stays until the next restart.
-    }
 }
 
 async function copyWithRetries(sourcePath: string, targetPath: string): Promise<void> {
@@ -189,23 +172,6 @@ async function copyWithRetries(sourcePath: string, targetPath: string): Promise<
         }
     }
     throw lastError;
-}
-
-// A dll left in the server's default plugins folder (bin/net10/plugins, the
-// old manual test loop) is loaded BEFORE the managed copy and shadows it —
-// the server only uses the first registered provider. Remove the stray copy so
-// the deployed one is the single source of truth.
-export function removeLegacyPluginCopy(context: vscode.ExtensionContext): void {
-    const legacyPath = context.asAbsolutePath(
-        path.join('bin', 'net10', 'plugins', PLUGIN_DLL_NAME));
-    try {
-        if (fs.existsSync(legacyPath)) {
-            fs.rmSync(legacyPath, { force: true });
-            console.log(`Removed legacy plugin copy: ${legacyPath}`);
-        }
-    } catch {
-        // Best effort: a locked dll stays until the next restart.
-    }
 }
 
 export async function stopLlamaServer(installDir: string): Promise<void> {
