@@ -17,6 +17,7 @@ import {
     State,
     TransportKind
 } from 'vscode-languageclient/node';
+import * as fullline from './fullline';
 
 let controller: CompilerController | undefined;
 let languageClient: LanguageClient | undefined;
@@ -29,6 +30,16 @@ let lastRun: {
 let compilationInProgress = false;
 let compilationGeneration = 0;
 let lastPascalDocumentUri: vscode.Uri | undefined;
+let languageServerOutput: vscode.LogOutputChannel | undefined;
+// Per-client registrations (NuGet commands, providers, notifications) are
+// disposed and re-created together with the language client; keeping them in
+// context.subscriptions made every restart re-register commands, which threw
+// and left the window without a language server.
+let languageServerExtras: vscode.Disposable[] = [];
+let fullLineOperation: Promise<unknown> = Promise.resolve();
+// Set while applyFullLineState itself flips the enabled setting, so the
+// configuration listener does not run a second, redundant apply cycle.
+let suppressConfigApply = false;
 
 type CompilerTarget = 'net-framework' | 'net10';
 
@@ -450,6 +461,9 @@ export function activate(context: vscode.ExtensionContext): void {
     );
 
     startLanguageServer(context);
+    // Логи установки/обновления ИИ-дополнения идут в канал Language Server.
+    registerFullLineCompletion(context, getLanguageServerOutput(context));
+    void clearMovedFullLineSettings();
 
     context.subscriptions.push(
         vscode.window.onDidCloseTerminal(terminal => {
@@ -1653,12 +1667,79 @@ async function selectNavigationIdentifier(
     return await Promise.all(result.map(selectName)) as vscode.Location[] | vscode.LocationLink[];
 }
 
-function startLanguageServer(context: vscode.ExtensionContext): void {
+function getLanguageServerOutput(context: vscode.ExtensionContext): vscode.LogOutputChannel {
+    const existing = languageServerOutput;
+    if (existing) {
+        return existing;
+    }
     const output = vscode.window.createOutputChannel(
         'PascalABC.NET Language Server',
         { log: true }
     );
     context.subscriptions.push(output);
+    languageServerOutput = output;
+    return output;
+}
+
+// The language client logs every server process exit as an error — including
+// the planned stop() when we restart the server. Exit code 0 is by definition
+// our own graceful shutdown (a crash cannot exit 0), so that single line is
+// filtered out to avoid a false "the server fell" alarm; other codes and
+// signals stay visible.
+class FilteredServerOutput implements vscode.OutputChannel {
+    public constructor(private readonly channel: vscode.OutputChannel) {
+    }
+
+    public get name(): string {
+        return this.channel.name;
+    }
+
+    public append(value: string): void {
+        if (!value.includes('Server process exited with code 0')) {
+            this.channel.append(value);
+        }
+    }
+
+    public appendLine(value: string): void {
+        if (!value.includes('Server process exited with code 0')) {
+            this.channel.appendLine(value);
+        }
+    }
+
+    public replace(value: string): void {
+        if (!value.includes('Server process exited with code 0')) {
+            this.channel.replace(value);
+        }
+    }
+
+    public clear(): void {
+        this.channel.clear();
+    }
+
+    public show(
+        columnOrPreserveFocus?: vscode.ViewColumn | boolean,
+        preserveFocus?: boolean
+    ): void {
+        (this.channel.show as (a?: unknown, b?: boolean) => void)(
+            columnOrPreserveFocus,
+            preserveFocus);
+    }
+
+    public hide(): void {
+        this.channel.hide();
+    }
+
+    public dispose(): void {
+        this.channel.dispose();
+    }
+}
+
+function startLanguageServer(context: vscode.ExtensionContext): void {
+    const output = getLanguageServerOutput(context);
+    for (const disposable of languageServerExtras) {
+        disposable.dispose();
+    }
+    languageServerExtras = [];
 
     let serverPath: string;
     try {
@@ -1720,24 +1801,38 @@ function startLanguageServer(context: vscode.ExtensionContext): void {
         `${dotnetCommand} ${serverPath}`
     );
 
+    // The full line completion plugin lives in the persistent install
+    // directory (survives extension updates), not in bin/net10; the server
+    // picks it up through --plugins-dir when the feature is on.
+    const fullLineInstallDir = fullline.getInstallDir();
+    const fullLineActive = fullline.getFullLineSettings().enabled &&
+        fullline.isInstalled(fullLineInstallDir);
+    const serverArgs = [
+        serverPath,
+        '--stdio',
+        '--documentation-language',
+        'ru'
+    ];
+    if (fullLineActive) {
+        serverArgs.push('--plugins-dir', fullline.getPluginsDir(fullLineInstallDir));
+    }
     const serverOptions: ServerOptions = {
         command: dotnetCommand,
-        args: [
-            serverPath,
-            '--stdio',
-            '--documentation-language',
-            'ru'
-        ],
+        args: serverArgs,
         transport: TransportKind.stdio,
         options: {
             cwd: path.dirname(serverPath),
-            detached: false
+            detached: false,
+            env: {
+                ...process.env,
+                [fullline.DIR_ENV_VARIABLE]: fullLineInstallDir
+            }
         }
     };
     const clientOptions: LanguageClientOptions = {
         initializationOptions: { manualNuGetRestore: true },
         documentSelector: [{ language: 'pascalabc' }],
-        outputChannel: output,
+        outputChannel: new FilteredServerOutput(output),
         diagnosticCollectionName: 'pascalabc-language-server',
         middleware: {
             provideDefinition: async (document, position, token, next) =>
@@ -1781,9 +1876,49 @@ function startLanguageServer(context: vscode.ExtensionContext): void {
         serverOptions,
         clientOptions
     );
-    registerNuGet(context, client);
+    languageServerExtras.push(registerNuGet(client));
 
-    context.subscriptions.push(
+    // Full line completion: forwarded to the language server, whose plugins
+    // provide the suggestion text (pascalabc/inlineCompletion request).
+    languageServerExtras.push(
+        vscode.languages.registerInlineCompletionItemProvider(
+            { language: 'pascalabc' },
+            {
+                async provideInlineCompletionItems(
+                    document: vscode.TextDocument,
+                    position: vscode.Position,
+                    _context: vscode.InlineCompletionContext,
+                    token: vscode.CancellationToken
+                ) {
+                    if (!fullline.getFullLineSettings().enabled) {
+                        return { items: [] };
+                    }
+                    if (!client.isRunning()) {
+                        return { items: [] };
+                    }
+                    try {
+                        const result = await client.sendRequest<{
+                            items?: { insertText?: string }[];
+                        }>('pascalabc/inlineCompletion', {
+                            textDocument: { uri: document.uri.toString() },
+                            position: { line: position.line, character: position.character }
+                        }, token);
+                        return {
+                            items: (result?.items ?? [])
+                                .map((item: { insertText?: string }) => item.insertText)
+                                .filter((text): text is string => typeof text === 'string' && text.length > 0)
+                                .map((text: string) => new vscode.InlineCompletionItem(text))
+                        };
+                    } catch (error) {
+                        output.error(`[fullline] inline completion request failed: ${String(error)}`);
+                        return { items: [] };
+                    }
+                }
+            }
+        )
+    );
+
+    languageServerExtras.push(
         vscode.workspace.registerTextDocumentContentProvider('pascalabc-metadata', {
             provideTextDocumentContent: async (uri, token) => {
                 const { document } = await getMetadata(uri, token);
@@ -1799,7 +1934,7 @@ function startLanguageServer(context: vscode.ExtensionContext): void {
         })
     );
 
-    context.subscriptions.push(client.onDidChangeState(event => {
+    languageServerExtras.push(client.onDidChangeState(event => {
         if (event.newState === State.Stopped) {
             metadataDocuments.clear();
         }
@@ -1826,6 +1961,390 @@ function startLanguageServer(context: vscode.ExtensionContext): void {
             'Compilation and Run remain available.'
         );
     });
+}
+
+// ---- AI full-line completion lifecycle ------------------------------------
+
+function runFullLineOperation<T>(operation: () => Promise<T>): Promise<T> {
+    // Serializes lifecycle operations (install/update/remove/restart) so a
+    // checkbox flip and a palette command can never run setup concurrently.
+    const result = fullLineOperation.then(operation, operation);
+    fullLineOperation = result.then(() => undefined, () => undefined);
+    return result;
+}
+
+async function setFullLineEnabled(enabled: boolean): Promise<void> {
+    await vscode.workspace.getConfiguration('pascalabc').update(
+        'fullLineCompletion.enabled',
+        enabled,
+        vscode.ConfigurationTarget.Global
+    );
+}
+
+// The model url/revision moved out of user settings into release constants
+// (resolveModelUrl). Drop stale copies left in settings.json: an ignored
+// setting with no manifest entry shows a warning in the Settings editor.
+async function clearMovedFullLineSettings(): Promise<void> {
+    const configuration = vscode.workspace.getConfiguration('pascalabc');
+    for (const key of ['fullLineCompletion.modelUrl', 'fullLineCompletion.modelRevision']) {
+        try {
+            if (configuration.inspect(key)?.globalValue !== undefined) {
+                await configuration.update(key, undefined, vscode.ConfigurationTarget.Global);
+            }
+        } catch {
+            // Best effort cleanup; a leftover setting only warns.
+        }
+    }
+}
+
+async function stopLanguageServer(context: vscode.ExtensionContext): Promise<void> {
+    const client = languageClient;
+    languageClient = undefined;
+    if (client?.needsStop()) {
+        try {
+            await client.stop();
+        } catch (error) {
+            getLanguageServerOutput(context).error(`Language server stop failed: ${String(error)}`);
+        }
+    }
+}
+
+async function restartLanguageServer(context: vscode.ExtensionContext): Promise<void> {
+    await stopLanguageServer(context);
+    startLanguageServer(context);
+}
+
+function registerFullLineCompletion(
+    context: vscode.ExtensionContext,
+    output: vscode.OutputChannel
+): void {
+    const applyState = (options: { install?: boolean; enable?: boolean } = {}) =>
+        runFullLineOperation(() => applyFullLineState(context, output, options));
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('pascalabc.fullLineCompletion.toggle', async () => {
+            await setFullLineEnabled(!fullline.getFullLineSettings().enabled);
+        }),
+        // «Установить компоненты» всегда ведёт через установку/переустановку
+        // (с подтверждением) и включает фичу — какова бы ни была галочка.
+        vscode.commands.registerCommand('pascalabc.fullLineCompletion.install', () =>
+            applyState({ install: true, enable: true })),
+        vscode.commands.registerCommand('pascalabc.fullLineCompletion.update', () =>
+            applyState({ install: true, enable: true })),
+        vscode.commands.registerCommand('pascalabc.fullLineCompletion.remove', () =>
+            runFullLineOperation(() => removeFullLineComponents(context, output))),
+        vscode.commands.registerCommand('pascalabc.fullLineCompletion.status', () =>
+            showFullLineStatus(output)),
+        // The setting is the single source of truth: the checkbox and the
+        // palette commands both write it, and side effects happen only here.
+        vscode.workspace.onDidChangeConfiguration(event => {
+            if (!event.affectsConfiguration('pascalabc.fullLineCompletion.enabled')) {
+                return;
+            }
+            if (suppressConfigApply) {
+                return;
+            }
+            void applyState();
+        })
+    );
+
+    void runFullLineOperation(() => checkFullLineOnStartup(context, output));
+}
+
+async function applyFullLineState(
+    context: vscode.ExtensionContext,
+    output: vscode.OutputChannel,
+    options: { install?: boolean; enable?: boolean }
+): Promise<void> {
+    if (options.enable && !fullline.getFullLineSettings().enabled) {
+        // «Установить/обновить» включает фичу сама; слушатель настройки на этот
+        // момент не должен запускать собственный цикл применения.
+        suppressConfigApply = true;
+        try {
+            await setFullLineEnabled(true);
+        } finally {
+            suppressConfigApply = false;
+        }
+    }
+    const settings = fullline.getFullLineSettings();
+    const installDir = fullline.getInstallDir();
+
+    if (!settings.enabled) {
+        output.appendLine('AI full-line completion is disabled.');
+        if (languageClient?.isRunning()) {
+            // Dropping --plugins-dir unloads the plugin; its llama-server dies
+            // with the old language server process.
+            await restartLanguageServer(context);
+        }
+        return;
+    }
+
+    let installed = fullline.isInstalled(installDir);
+    if (!installed || options.install) {
+        const proceed = await confirmFullLineInstall(installed);
+        if (!proceed) {
+            if (!installed) {
+                await setFullLineEnabled(false);
+                void vscode.window.showInformationMessage(
+                    'ИИ-дополнение строк не установлено. Повторить: палитра команд → ' +
+                    '«ИИ-дополнение — включить/выключить» или галочка в настройках.');
+            }
+            return;
+        }
+        // Setup переизвлекает файлы llama.cpp и перекладывает dll — оба заняты
+        // работающим сервером и его плагином, сначала остановим их.
+        await stopLanguageServer(context);
+        await fullline.stopLlamaServer(installDir);
+        installed = await installFullLineComponents(context, output);
+        if (!installed) {
+            startLanguageServer(context);
+            return;
+        }
+    } else {
+        try {
+            // Extension updates replace the VSIX folder; keep the deployed dll
+            // in sync with the bundled one.
+            await fullline.deployPluginDll(context, installDir);
+        } catch (error) {
+            output.appendLine(`Plugin redeploy skipped: ${String(error)}`);
+        }
+    }
+
+    await restartLanguageServer(context);
+    trackModelWarmup(installDir, output);
+}
+
+// Тексты расширения сейчас по-русски (уведомления и так захардкожены), поэтому
+// и модальные тексты — тоже русские, чтобы интерфейс был консистентным.
+// Позже: честная локализация через vscode.env.language + nls-строки.
+function isRussianUi(): boolean {
+    return true;
+}
+
+async function confirmFullLineInstall(alreadyInstalled: boolean): Promise<boolean> {
+    const russian = isRussianUi();
+    const acceptLabel = alreadyInstalled
+        ? (russian ? 'Переустановить' : 'Reinstall')
+        : (russian ? 'Установить' : 'Install');
+    const message = alreadyInstalled
+        ? (russian
+            ? 'Переустановить компоненты ИИ-дополнения строк (llama.cpp и модель)?'
+            : 'Reinstall the AI full-line completion components (llama.cpp and the model)?')
+        : (russian
+            ? 'ИИ-дополнение строк требует установки компонентов: llama.cpp и модель ИИ ' +
+                '(скачивание может занять несколько гигабайт). Установить?'
+            : 'AI full-line completion needs its components installed: llama.cpp and the AI ' +
+                'model (the download may take several gigabytes). Install?');
+    // Модальное окно: обычная панель уведомлений может закрыться незамеченной,
+    // и тогда установка молча не запустится. Кнопку «Отмена» не добавляем —
+    // модальный диалог VS Code показывает собственную (и крестик).
+    const action = await vscode.window.showWarningMessage(
+        message,
+        { modal: true },
+        acceptLabel);
+    return action === acceptLabel;
+}
+
+
+async function installFullLineComponents(
+    context: vscode.ExtensionContext,
+    output: vscode.OutputChannel
+): Promise<boolean> {
+    const installDir = fullline.getInstallDir();
+    const settings = fullline.getFullLineSettings();
+    // Источник модели закреплён за релизом расширения (см. fullline.ts) —
+    // отдельной настройки для пользователя нет.
+    const modelUrl = fullline.resolveModelUrl();
+
+    const dotnet = resolveDotnetExecutable();
+    try {
+        await vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Notification,
+                title: 'Установка ИИ-дополнения строк (llama.cpp и модель)',
+                cancellable: true
+            },
+            async (progress, token) => {
+                progress.report({ message: 'Развёртывание плагина LSP...' });
+                await fullline.deployPluginDll(context, installDir);
+                let stageMessage = 'Установка компонентов';
+                await fullline.runSetup(
+                    context,
+                    dotnet,
+                    installDir,
+                    {
+                        device: settings.device,
+                        modelUrl,
+                        modelRevision: fullline.RECOMMENDED_MODEL_REVISION
+                    },
+                    event => {
+                        if (event.event === 'stage' && event.message) {
+                            stageMessage = event.message;
+                            progress.report({ message: event.message });
+                        } else if (event.event === 'progress') {
+                            const receivedMb = Math.floor((event.received ?? 0) / (1 << 20));
+                            const totalMb = event.total
+                                ? Math.floor(event.total / (1 << 20))
+                                : undefined;
+                            progress.report({
+                                message: totalMb
+                                    ? `${stageMessage}: ${receivedMb} / ${totalMb} МБ`
+                                    : `${stageMessage}: ${receivedMb} МБ`
+                            });
+                        }
+                    },
+                    output,
+                    token);
+            });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        output.appendLine(`Full line completion setup failed: ${message}`);
+        output.show(true);
+        void vscode.window.showErrorMessage(
+            `Не удалось установить ИИ-дополнение строк: ${message} ` +
+            'Повторить: палитра команд → «ИИ-дополнение — установить компоненты».');
+        return false;
+    }
+
+    void vscode.window.showInformationMessage('ИИ-дополнение строк установлено.');
+    return true;
+}
+
+async function removeFullLineComponents(
+    context: vscode.ExtensionContext,
+    output: vscode.OutputChannel
+): Promise<void> {
+    const installDir = fullline.getInstallDir();
+    if (!fullline.isInstalled(installDir)) {
+        void vscode.window.showInformationMessage('Компоненты ИИ-дополнения не установлены.');
+        return;
+    }
+    const russian = isRussianUi();
+    const removeLabel = russian ? 'Удалить' : 'Remove';
+    const action = await vscode.window.showWarningMessage(
+        russian
+            ? 'Удалить llama.cpp и модель ИИ с диска? Каталог общий для всех хостов PascalABC.NET.'
+            : 'Remove llama.cpp and the AI model from disk? The directory is shared by all ' +
+                'PascalABC.NET hosts.',
+        { modal: true },
+        removeLabel);
+    if (action !== removeLabel) {
+        return;
+    }
+    output.appendLine(`Removing full line completion runtime: ${installDir}`);
+    // Сначала останавливаем LSP-сервер: он держит dll плагина загруженной, а его
+    // плагин — процесс llama-server; без остановки удаление падает с EPERM.
+    await stopLanguageServer(context);
+    try {
+        await fullline.removeComponents(installDir);
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        output.appendLine(`Removing failed: ${message}`);
+        void vscode.window.showErrorMessage(
+            `Не удалось удалить компоненты: ${message} ` +
+            'Повторить: палитра команд → «ИИ-дополнение — удалить компоненты».');
+        startLanguageServer(context);
+        return;
+    }
+    startLanguageServer(context);
+    void vscode.window.showInformationMessage('Компоненты ИИ-дополнения удалены.');
+}
+
+function trackModelWarmup(installDir: string, output: vscode.OutputChannel): void {
+    if (process.env[fullline.URL_ENV_VARIABLE]) {
+        // An external model server was supplied — there is nothing to warm up.
+        return;
+    }
+    const ready = fullline.waitForModelReady(installDir);
+    void vscode.window.setStatusBarMessage(
+        '$(loading~spin) ИИ-модель загружается...',
+        ready.then(warm => {
+            if (warm) {
+                void vscode.window.setStatusBarMessage('$(check) ИИ-модель готова', 5000);
+            } else {
+                output.appendLine('The model server did not become ready in time.');
+                void vscode.window.setStatusBarMessage(
+                    '$(warning) ИИ-модель не загрузилась', 8000);
+            }
+        }, () => {
+            // The spinner must clear even if tracking failed.
+            output.appendLine('Model warm-up tracking failed.');
+            void vscode.window.setStatusBarMessage(
+                '$(warning) Не удалось определить готовность модели', 8000);
+        }));
+}
+
+async function checkFullLineOnStartup(
+    context: vscode.ExtensionContext,
+    output: vscode.OutputChannel
+): Promise<void> {
+    const settings = fullline.getFullLineSettings();
+    if (!settings.enabled) {
+        return;
+    }
+    const installDir = fullline.getInstallDir();
+
+    if (!fullline.isInstalled(installDir)) {
+        // «Включено, но не установлено» — доводим до разрешения тем же модальным
+        // диалогом установки, что и при включении галочки: окно не должно
+        // исчезать незамеченным (обычное уведомление легко пропустить).
+        await applyFullLineState(context, output, {});
+        return;
+    }
+
+    try {
+        // Cheap local consistency check; also refreshes the dll after updates.
+        await fullline.deployPluginDll(context, installDir);
+    } catch (error) {
+        output.appendLine(`Plugin redeploy skipped: ${String(error)}`);
+    }
+
+    // Model version check against the recommended revision (cheap, local).
+    const config = fullline.readSetupConfig(installDir);
+    const recommendedUrl = fullline.resolveModelUrl();
+    if (config?.modelUrl && config.modelUrl !== recommendedUrl) {
+        output.appendLine(
+            `Full line completion: model update available ` +
+            `(installed ${config.modelUrl}, recommended ${recommendedUrl}).`);
+        const action = await vscode.window.showInformationMessage(
+            'ИИ-модель устарела: вышла новая версия модели.',
+            'Обновить',
+            'Позже');
+        if (action === 'Обновить') {
+            output.appendLine('Full line completion: model update requested.');
+            await runFullLineOperation(() => applyFullLineState(context, output, { install: true }));
+            output.appendLine('Full line completion: model update finished.');
+        } else {
+            output.appendLine('Full line completion: model update postponed.');
+        }
+    } else {
+        output.appendLine('Full line completion: model is up to date.');
+    }
+
+    trackModelWarmup(installDir, output);
+}
+
+function showFullLineStatus(output: vscode.OutputChannel): void {
+    const installDir = fullline.getInstallDir();
+    const settings = fullline.getFullLineSettings();
+    const config = fullline.readSetupConfig(installDir);
+    const state = fullline.readServerState(installDir);
+    output.appendLine('');
+    output.appendLine('=== Full line completion status ===');
+    output.appendLine(`Enabled: ${settings.enabled}`);
+    output.appendLine(`Install directory: ${installDir}`);
+    output.appendLine(`Installed: ${fullline.isInstalled(installDir)}`);
+    output.appendLine(`llama.cpp: ${config?.llamaTag ?? 'n/a'} (${config?.deviceClass ?? 'n/a'})`);
+    output.appendLine(`Model file: ${config?.modelPath ?? 'n/a'}`);
+    output.appendLine(
+        `Model source: ${config?.modelUrl ?? 'n/a'}` +
+        (config?.modelRevision ? ` @ ${config.modelRevision}` : ''));
+    output.appendLine(`Model sha256: ${config?.modelSha256 ?? 'n/a'}`);
+    output.appendLine(
+        `llama-server: ${state ? `pid ${state.pid}, port ${state.port}` : 'not running'}`);
+    output.show(true);
+    void vscode.window.showInformationMessage(
+        'Статус ИИ-дополнения — в канале вывода PascalABC.NET.');
 }
 
 export async function deactivate(): Promise<void> {
