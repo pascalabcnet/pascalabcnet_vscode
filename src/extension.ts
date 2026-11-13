@@ -21,7 +21,11 @@ import {
 let controller: CompilerController | undefined;
 let languageClient: LanguageClient | undefined;
 let runTerminal: vscode.Terminal | undefined;
-let activeRunExecution: vscode.TerminalShellExecution | undefined;
+let lastRun: {
+    terminal: vscode.Terminal;
+    outputFile: string;
+    finished: boolean;
+} | undefined;
 let compilationInProgress = false;
 let compilationGeneration = 0;
 let lastPascalDocumentUri: vscode.Uri | undefined;
@@ -451,7 +455,6 @@ export function activate(context: vscode.ExtensionContext): void {
         vscode.window.onDidCloseTerminal(terminal => {
             if (terminal === runTerminal) {
                 runTerminal = undefined;
-                activeRunExecution = undefined;
             }
         })
     );
@@ -826,7 +829,14 @@ async function compileActiveDocument(
 
     try {
         if (runAfterSuccess) {
-            await stopActiveRun();
+            try {
+                await stopActiveRun();
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                output.appendLine(`[error] ${message}`);
+                void vscode.window.showErrorMessage(message);
+                return;
+            }
         }
 
         await performCompileActiveDocument(
@@ -849,43 +859,58 @@ function invalidateActiveCompilation(): void {
 }
 
 async function stopActiveRun(): Promise<void> {
-    const terminal = runTerminal;
-
-    if (!activeRunExecution || !terminal) {
+    const run = lastRun;
+    if (!run) {
         return;
     }
 
-    activeRunExecution = undefined;
-    runTerminal = undefined;
+    // sendText has no completion event. Close its terminal before probing the
+    // executable so a queued command cannot start after a successful probe.
+    if (!run.finished && run.terminal === runTerminal) {
+        await new Promise<void>((resolve, reject) => {
+            const subscription = vscode.window.onDidCloseTerminal(terminal => {
+                if (terminal === run.terminal) {
+                    clearTimeout(timeout);
+                    subscription.dispose();
+                    resolve();
+                }
+            });
+            const timeout = setTimeout(() => {
+                subscription.dispose();
+                reject(new Error('PascalABC.NET: терминал предыдущего запуска не закрылся. Закройте его и повторите Run.'));
+            }, 5000);
+            run.terminal.dispose();
+        });
+    }
 
-    await new Promise<void>(resolve => {
-        let completed = false;
-        let timeout: NodeJS.Timeout | undefined;
+    if (process.platform === 'win32') {
+        await waitForRunExecutable(run.outputFile);
+    }
+    lastRun = undefined;
+}
 
-        const complete = (): void => {
-            if (completed) {
+async function waitForRunExecutable(outputFile: string): Promise<void> {
+    const deadline = Date.now() + 5000;
+    for (;;) {
+        try {
+            // Probe write access without truncating or modifying the executable.
+            const handle = await fs.promises.open(outputFile, 'r+');
+            await handle.close();
+            return;
+        } catch (error) {
+            const code = (error as NodeJS.ErrnoException).code;
+            if (code === 'ENOENT') {
                 return;
             }
-
-            completed = true;
-            subscription.dispose();
-
-            if (timeout) {
-                clearTimeout(timeout);
+            if (code !== 'EBUSY' && code !== 'EACCES' && code !== 'EPERM') {
+                throw error;
             }
-
-            resolve();
-        };
-
-        const subscription = vscode.window.onDidCloseTerminal(closedTerminal => {
-            if (closedTerminal === terminal) {
-                complete();
+            if (Date.now() >= deadline) {
+                throw new Error(`PascalABC.NET: нет доступа на запись к ${outputFile}. Завершите предыдущий запуск и повторите Run.`);
             }
-        });
-
-        timeout = setTimeout(complete, 1500);
-        terminal.dispose();
-    });
+            await new Promise(resolve => setTimeout(resolve, 50));
+        }
+    }
 }
 
 async function performCompileActiveDocument(
@@ -1093,7 +1118,7 @@ async function performCompileActiveDocument(
                             await waitForShellIntegration(terminal);
 
                         if (!shellIntegration) {
-                            activeRunExecution = undefined;
+                            lastRun = { terminal, outputFile, finished: false };
                             terminal.sendText(commandLine);
                             return;
                         }
@@ -1102,6 +1127,7 @@ async function performCompileActiveDocument(
                             await waitForInitialShellPrompt(shellIntegration);
                         }
 
+                        const run = { terminal, outputFile, finished: false };
                         let execution: vscode.TerminalShellExecution;
                         const endSubscription =
                             vscode.window.onDidEndTerminalShellExecution(
@@ -1112,11 +1138,10 @@ async function performCompileActiveDocument(
 
                                     endSubscription.dispose();
 
-                                    if (activeRunExecution !== execution) {
+                                    run.finished = true;
+                                    if (lastRun !== run || runTerminal !== terminal) {
                                         return;
                                     }
-
-                                    activeRunExecution = undefined;
 
                                     void vscode.commands.executeCommand(
                                         'workbench.action.terminal.scrollToBottom'
@@ -1130,9 +1155,8 @@ async function performCompileActiveDocument(
                                 }
                             );
 
-                        activeRunExecution = undefined;
                         execution = shellIntegration.executeCommand(commandLine);
-                        activeRunExecution = execution;
+                        lastRun = run;
                     }
                 } else {
                     output.appendLine(
