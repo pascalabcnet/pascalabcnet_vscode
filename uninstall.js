@@ -18,10 +18,17 @@ if (process.platform === 'win32' && process.env.LOCALAPPDATA) {
 candidates.push(path.join(os.homedir(), '.local', 'share', 'PascalABC.NET', 'llama.cpp'));
 candidates.push(path.join(os.homedir(), 'Library', 'Application Support', 'PascalABC.NET', 'llama.cpp'));
 
-for (const directory of candidates) {
+// Since LspPlugins moved next to llama.cpp, remove the sibling folder too
+// (keep it simple and delete the shared root).
+const roots = candidates.map(directory => path.dirname(directory));
+
+for (const directory of [...candidates, ...roots]) {
     // Delete only our own installation: fullline-setup.json is the marker
-    // written by FullLineCompletionSetup.
-    if (!fs.existsSync(path.join(directory, 'fullline-setup.json'))) {
+    // written by FullLineCompletionSetup (the root only if it still holds the
+    // plugin dll).
+    const ownInstall = fs.existsSync(path.join(directory, 'fullline-setup.json'));
+    const ownRoot = fs.existsSync(path.join(directory, 'LspPlugins', 'FullLineCompletionLspPlugin.dll'));
+    if (!ownInstall && !ownRoot) {
         continue;
     }
     try {

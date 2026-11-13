@@ -459,6 +459,7 @@ export function activate(context: vscode.ExtensionContext): void {
     startLanguageServer(context);
     // Логи установки/обновления ИИ-дополнения идут в канал Language Server.
     registerFullLineCompletion(context, getLanguageServerOutput(context));
+    void clearMovedFullLineSettings();
 
     context.subscriptions.push(
         vscode.window.onDidCloseTerminal(terminal => {
@@ -1954,6 +1955,22 @@ async function setFullLineEnabled(enabled: boolean): Promise<void> {
         enabled,
         vscode.ConfigurationTarget.Global
     );
+}
+
+// The model url/revision moved out of user settings into release constants
+// (resolveModelUrl). Drop stale copies left in settings.json: an ignored
+// setting with no manifest entry shows a warning in the Settings editor.
+async function clearMovedFullLineSettings(): Promise<void> {
+    const configuration = vscode.workspace.getConfiguration('pascalabc');
+    for (const key of ['fullLineCompletion.modelUrl', 'fullLineCompletion.modelRevision']) {
+        try {
+            if (configuration.inspect(key)?.globalValue !== undefined) {
+                await configuration.update(key, undefined, vscode.ConfigurationTarget.Global);
+            }
+        } catch {
+            // Best effort cleanup; a leftover setting only warns.
+        }
+    }
 }
 
 async function stopLanguageServer(context: vscode.ExtensionContext): Promise<void> {

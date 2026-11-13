@@ -83,19 +83,25 @@ export function resolveModelUrl(): string {
     return (process.env.PABC_FULLLINE_MODEL_URL ?? '').trim() || RECOMMENDED_MODEL_URL;
 }
 
-// Must match the FullLineCompletionSetup default install directory
-// (Environment.SpecialFolder.LocalApplicationData\PascalABC.NET\llama.cpp).
 export function getInstallDir(): string {
+    return path.join(getFullLineRootDir(), 'llama.cpp');
+}
+
+// The AppData root shared by all PascalABC.NET hosts: llama.cpp/ holds the
+// server and the model, LspPlugins/ (a sibling) holds the managed LSP plugin
+// dll. A sibling so the plugin can be re-deployed without touching the model.
+export function getFullLineRootDir(): string {
     const applicationDataDirectory = process.platform === 'win32'
         ? path.join(
             process.env.LOCALAPPDATA ?? path.join(os.homedir(), 'AppData', 'Local'),
             'PascalABC.NET')
         : path.join(os.homedir(), '.local', 'share', 'PascalABC.NET');
-    return path.join(applicationDataDirectory, 'llama.cpp');
+    return applicationDataDirectory;
 }
 
 export function getPluginsDir(installDir: string): string {
-    return path.join(installDir, LSP_PLUGINS_DIR_NAME);
+    // installDir is <root>/llama.cpp; plugins live next to it, not inside.
+    return path.join(path.dirname(installDir), LSP_PLUGINS_DIR_NAME);
 }
 
 export function getConfigPath(installDir: string): string {
@@ -153,6 +159,22 @@ export async function deployPluginDll(context: vscode.ExtensionContext, installD
     fs.mkdirSync(path.dirname(targetPath), { recursive: true });
     await copyWithRetries(bundlePath, targetPath);
     removeLegacyPluginCopy(context);
+    removeLegacyPluginsDir(installDir);
+}
+
+// Before LspPlugins moved next to llama.cpp it lived inside it; servers and
+// tools that scan llama.cpp recursively could pick the dll up. Remove the old
+// copy once the new location is in place.
+function removeLegacyPluginsDir(installDir: string): void {
+    try {
+        const legacy = path.join(installDir, LSP_PLUGINS_DIR_NAME);
+        if (fs.existsSync(legacy)) {
+            fs.rmSync(legacy, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+            console.log(`Removed legacy plugins directory: ${legacy}`);
+        }
+    } catch {
+        // Best effort: a locked dll stays until the next restart.
+    }
 }
 
 async function copyWithRetries(sourcePath: string, targetPath: string): Promise<void> {
@@ -216,6 +238,14 @@ export async function stopLlamaServer(installDir: string): Promise<void> {
 export async function removeComponents(installDir: string): Promise<void> {
     await stopLlamaServer(installDir);
     fs.rmSync(installDir, {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 300
+    });
+    // The plugin dir is a sibling of llama.cpp: remove it too, so "remove
+    // components" leaves no trace.
+    fs.rmSync(getPluginsDir(installDir), {
         recursive: true,
         force: true,
         maxRetries: 10,
